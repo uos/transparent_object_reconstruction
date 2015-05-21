@@ -97,8 +97,8 @@ add_dependencies(combine_clouds_client transparent_object_reconstruction_gencfg)
 add_dependencies(occupancy_grid hole_region)
 add_dependencies(tools occupancy_grid hole_region)
 add_dependencies(occp_test occupancy_grid hole_region)
-add_dependencies(holes_msgs_test_pub transparent_object_reconstruction_gencfg)
-add_dependencies(hole_visualizer transparent_object_reconstruction_gencfg)
+add_dependencies(holes_msgs_test_pub transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(hole_visualizer transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(hole_test_pub ${catkin_LIBRARIES})
