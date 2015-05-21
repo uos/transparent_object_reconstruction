@@ -281,11 +281,9 @@ struct HoleDetector
 
   static void declare_io ( const tendrils& params, tendrils& inputs, tendrils& outputs)
   {
-    inputs.declare<::pcl::PointIndices::ConstPtr> ("hull_indices", "The indices to extract.");
-    inputs.declare<ecto::pcl::PointCloud> ("convex_hull", "The convex full of the extracted tabletop");
-    inputs.declare<::pcl::ModelCoefficients::ConstPtr> ("model", "Model coefficients for the tabletop.");
+    inputs.declare<::pcl::PointIndices::ConstPtr> ("hull_indices", "The indices describing the convex hull to the table surface.");
+    inputs.declare<::pcl::ModelCoefficients::ConstPtr> ("model", "Model coefficients for the planar table surface.");
     outputs.declare<ecto::pcl::PointCloud> ("output", "Filtered Cloud.");
-    outputs.declare<std::vector<ecto::pcl::PointCloud> > ("holes_as_cloud", "holes as a vector of their convex hulls");
     outputs.declare<transparent_object_reconstruction::Holes> ("holes", "Detected holes inside the table convex hull.");
   }
 
@@ -296,9 +294,7 @@ struct HoleDetector
     plane_dist_threshold_ = params["plane_dist_threshold"];
     hull_indices_ = inputs["hull_indices"];
     model_ = inputs["model"];
-    convex_hull_ = inputs["convex_hull"];
     output_ = outputs["output"];
-    hole_convex_hulls_ = outputs["holes_as_cloud"];
     holes_mgs_ = outputs["holes"];
   }
 
@@ -465,7 +461,6 @@ struct HoleDetector
       Eigen::Vector4f plane_coefficients ((*model_)->values[0], (*model_)->values[1],
           (*model_)->values[2], (*model_)->values[3]);
       // create representations for the holes in the plane (atm only for complete hulls)
-      (*hole_convex_hulls_).reserve (inside_holes.size ());
       (*holes_mgs_).convex_hulls.reserve (inside_holes.size ());
       for (size_t i = 0; i < inside_holes.size (); ++i)
       {
@@ -518,8 +513,6 @@ struct HoleDetector
         }
         // store indices of points that are inside the convex hull - these will be removed later
         addRemoveIndices (input, convex_hull_polygon, remove_indices);
-        // TODO: probably remove later - publish convex hulls directly as vector of pointclouds
-        (*hole_convex_hulls_).push_back (ecto::pcl::xyz_cloud_variant_t (conv_border_cloud));
 
         // add current hole to Hole message
         sensor_msgs::PointCloud2 pc2;
@@ -551,9 +544,7 @@ struct HoleDetector
   ecto::spore<float> plane_dist_threshold_;
   ecto::spore<::pcl::PointIndices> hull_indices_;
   ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_; //TODO: is this what I get from the segmentation?
-  ecto::spore<ecto::pcl::PointCloud> convex_hull_;
   ecto::spore<ecto::pcl::PointCloud> output_;
-  ecto::spore<std::vector<ecto::pcl::PointCloud> > hole_convex_hulls_;
   ecto::spore<transparent_object_reconstruction::Holes> holes_mgs_;
 };
 
