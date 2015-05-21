@@ -1,0 +1,5 @@
+# point cloud to be added to the combined cloud
+sensor_msgs/PointCloud2 input_cloud
+---
+# combined point cloud with labels
+sensor_msgs/PointCloud2 combined_cloud
