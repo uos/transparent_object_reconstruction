@@ -118,6 +118,7 @@ target_link_libraries(holes_msgs_test_pub ${catkin_LIBRARIES})
 target_link_libraries(pose2quatTrans ${catkin_LIBRARIES})
 
 # Generate ecto cells
+pubsub_gen_wrap(transparent_object_reconstruction DESTINATION ${PROJECT_NAME} INSTALL)
 
 ectomodule(hole_detection DESTINATION ${PROJECT_NAME} INSTALL
   src/ecto/HoleDetector.cpp
