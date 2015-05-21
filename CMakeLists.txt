@@ -117,7 +117,10 @@ target_link_libraries(hole_visualizer ${catkin_LIBRARIES})
 target_link_libraries(holes_msgs_test_pub ${catkin_LIBRARIES})
 target_link_libraries(pose2quatTrans ${catkin_LIBRARIES})
 
-ectomodule(transparent_object_reconstruction DESTINATION ${PROJECT_NAME} INSTALL
-  src/HoleDetector.cpp)
+# Generate ecto cells
 
-link_ecto(transparent_object_reconstruction ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+ectomodule(hole_detection DESTINATION ${PROJECT_NAME} INSTALL
+  src/ecto/HoleDetector.cpp
+  src/ecto/module.cpp)
+link_ecto(hole_detection ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+add_dependencies(hole_detection_ectomodule ${PROJECT_NAME}_generate_messages_cpp)

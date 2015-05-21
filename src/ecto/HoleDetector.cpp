@@ -557,6 +557,6 @@ struct HoleDetector
   ecto::spore<transparent_object_reconstruction::Holes> holes_mgs_;
 };
 
-ECTO_CELL(transparent_object_reconstruction, ecto::pcl::PclCell<HoleDetector>,
+ECTO_CELL(hole_detection, ecto::pcl::PclCell<HoleDetector>,
     "HoleDetector", "Extract a new cloud given an existing cloud and a set of indices to extract.");
 
