@@ -15,6 +15,8 @@ find_package(catkin REQUIRED COMPONENTS
   ecto
   ecto_ros
   ecto_pcl
+  tf
+  tf_conversions
 )
 
 generate_dynamic_reconfigure_options(
@@ -31,12 +33,14 @@ add_service_files(
   FILES
   CombineClouds.srv
   CloudReset.srv
+  HoleIntersectorReset.srv
 )
 
 generate_messages(
   DEPENDENCIES
   std_msgs
   sensor_msgs
+  pcl_msgs
 )
 
 catkin_package(
@@ -83,6 +87,10 @@ add_dependencies(hole_visualizer transparent_object_reconstruction_gencfg ${PROJ
 
 add_executable(pose2quatTrans src/pose2quatTrans.cpp)
 target_link_libraries(pose2quatTrans ${catkin_LIBRARIES})
+
+add_executable(HoleIntersector src/HoleIntersector.cpp)
+target_link_libraries(HoleIntersector ${catkin_LIBRARIES} tools)
+add_dependencies(HoleIntersector transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
 
 # Tests
 add_executable(hole_test_pub src/hole_test_pub.cpp)
