@@ -143,6 +143,13 @@ sortCloudBySizeDesc (const CloudPtr &a, const CloudPtr &b);
 bool
 alignPlaneCoefficientsToOrigin (ModelPtr plane_coefficients);
 
+
+void
+calcPlaneTransformation (Eigen::Vector3f plane_normal,
+    const Eigen::Vector3f &origin, Eigen::Affine3f &transformation);
+
+
+
 /**
  * Method to calculate the affine transformations to move various planes
  * into the x-y plane.
@@ -934,5 +941,15 @@ unsigned int
 printGridToConsole (grid_values** occupancy_grid, unsigned int grid_dim_x,
     unsigned int grid_dim_y, std::vector<HoleRegion> &all_hole_regions,
     size_t plane_index);
+
+
+bool
+pointInPolygon2D (const std::vector<Eigen::Vector2i> &polygon, const Eigen::Vector2i &query_point);
+
+void
+createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_cloud,
+//    float sample_dist = STD_SAMPLE_DIST,
+    float sample_dist = 0.005f,
+    Eigen::Vector3f origin = Eigen::Vector3f::Zero ());
 
 #endif // TRANSP_OBJ_RECON_TOOLS

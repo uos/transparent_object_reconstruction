@@ -89,6 +89,49 @@ alignPlaneCoefficientsToOrigin (ModelPtr plane_coefficients)
   return false;
 }
 
+void calcPlaneTransformation (Eigen::Vector3f plane_normal,
+    const Eigen::Vector3f &origin, Eigen::Affine3f &transformation)
+{
+  Eigen::Vector3f ortho_to_normal = Eigen::Vector3f::Unit (3,1); // (0, 1, 0)
+
+  float x, y, z;
+  double angle = pcl::getAngle3D (Eigen::Vector4f (plane_normal[0],
+        plane_normal[1], plane_normal[2], 0.0f),
+      Eigen::Vector4f::Unit (4,2));
+  if (fabs (angle - M_PI) < angle)
+  {
+    angle = fabs (angle - M_PI);
+  }
+  if (angle < ::pcl::deg2rad (.5f))
+  {
+    plane_normal.normalize ();
+  }
+  else
+  {
+    if (fabs (plane_normal[2]) > std::numeric_limits<float>::epsilon ())
+    {
+      x = y = 1.0f; // chosen arbitrarily
+      z = plane_normal[0] + plane_normal[1];
+      z /= -plane_normal[2];
+    }
+    else if (fabs (plane_normal[1]) > std::numeric_limits<float>::epsilon ())
+    {
+      x = z = 1.0f; // chosen arbitrarily
+      y = plane_normal[0];
+      y /= -plane_normal[1];
+    }
+    else
+    {
+      x = .0f;
+      y = z = 1.0f; // chosen arbitrarily
+    }
+    ortho_to_normal = Eigen::Vector3f (x, y, z);
+    ortho_to_normal.normalize ();
+  }
+  pcl::getTransformationFromTwoUnitVectorsAndOrigin (ortho_to_normal,
+      plane_normal, origin, transformation);
+}
+
 void
 calcPlaneTransformations (const ModelVector &plane_coeff_vector,
     std::vector<Eigen::Affine3f> &transformation_vector)
@@ -1746,4 +1789,96 @@ printGridToConsole (grid_values** occupancy_grid, unsigned int grid_dim_x,
   grid_file.flush ();
   grid_file.close ();
   return nr_empty_cells;
+}
+
+bool
+pointInPolygon2D (const std::vector<Eigen::Vector2i> &polygon, const Eigen::Vector2i &query_point)
+{
+  bool inside = false;
+
+  std::vector<Eigen::Vector2i>::const_iterator start_it, end_it;
+
+  start_it = polygon.end () - 1;  // last vertex
+  end_it = polygon.begin ();
+  bool start_above, end_above;
+
+  start_above = (*start_it)[1] >= query_point[1] ? true : false;
+  while (end_it != polygon.end ())
+  {
+    end_above = (*end_it)[1] >= query_point[1] ? true : false;
+
+    if (start_above != end_above)
+    {
+      if (((*end_it)[1] - query_point[1]) * ((*end_it)[0] - (*start_it)[0]) <=
+          ((*end_it)[1] - (*start_it)[1]) * ((*end_it)[0] - query_point[0]))
+      {
+        if (end_above)
+        {
+          inside = !inside;
+        }
+      }
+      else
+      {
+        if (!end_above)
+        {
+          inside = !inside;
+        }
+      }
+    }
+    start_above = end_above;
+    start_it = end_it;
+    end_it++;
+  }
+  return inside;
+}
+
+void
+createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_cloud,
+    float sample_dist, Eigen::Vector3f origin)
+{
+  ray_cloud->points.clear ();
+
+  // get upper limit of number of sample points
+  Eigen::Vector3f curr_point;
+  LabelPoint min, max, tmp;
+  pcl::getMinMax3D (*base_cloud, min, max);
+  // create point that is farthest away of bounding box
+  Eigen::Vector3f upper_bound (
+      (fabs (min.x - origin[0]) > fabs (max.x - origin[0])) ?
+      (min.x - origin[0]) : (max.x - origin[0]),
+      (fabs (min.y - origin[1]) > fabs (max.y - origin[1])) ?
+      (min.y - origin[1]) : (max.y - origin[1]),
+      (fabs (min.z - origin[2]) > fabs (max.z - origin[2])) ?
+      (min.z - origin[2]) : (max.z - origin[2]));
+  double max_dist = sqrt (upper_bound.dot (upper_bound));
+  size_t max_sample_points = base_cloud->points.size () * max_dist / sample_dist;
+  size_t nr_steps;
+  float length;
+  // allocate upper bound of memory
+  ray_cloud->points.reserve (max_sample_points);
+
+  Eigen::Vector3f ray, step_vec, curr_sample;
+
+  LabelCloud::VectorType::const_iterator p_it = base_cloud->points.begin ();
+  while (p_it != base_cloud->points.end ())
+  {
+    ray = Eigen::Vector3f (p_it->x, p_it->y, p_it->z);
+    ray -= origin;
+    length = sqrt (ray.dot (ray));
+    nr_steps = floor (length / sample_dist);
+    step_vec = ray.normalized ();
+    step_vec *= -sample_dist;
+    curr_sample = ray;
+
+    tmp = *p_it;
+    for (size_t i = 0; i < nr_steps; ++i)
+    {
+      tmp.x = curr_sample[0];
+      tmp.y = curr_sample[1];
+      tmp.z = curr_sample[2];
+      ray_cloud->points.push_back (tmp);
+      curr_sample += step_vec;
+    }
+    p_it++;
+  }
 }
