@@ -1882,3 +1882,26 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
     p_it++;
   }
 }
+
+bool
+projectPointOnPlane (const PointType &input, PointType &projected_point, const ModelPtr plane)
+{
+  return lineWithPlaneIntersection (input, *plane, projected_point, LINE_PLANE_ANGLE_EPS);
+}
+
+bool
+projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const ModelPtr plane)
+{
+  PointType tmp_i, tmp_p;
+  tmp_i.x = input.x;
+  tmp_i.y = input.y;
+  tmp_i.z = input.z;
+  projected_point = input;
+  if (projectPointOnPlane (tmp_i, tmp_p, plane))
+  {
+    projected_point.x = tmp_p.x;
+    projected_point.y = tmp_p.y;
+    projected_point.z = tmp_p.z;
+  }
+  return false;
+}

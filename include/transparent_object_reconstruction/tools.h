@@ -952,4 +952,23 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
     float sample_dist = 0.005f,
     Eigen::Vector3f origin = Eigen::Vector3f::Zero ());
 
+/**
+ * @brief Function to project a point into a given plane via a raytracing approach.
+ * For the projection a ray between the given input point and the origin (at
+ * (0,0,0) is created and checked for intersection with the plane, specified
+ * by the ModelCoefficientsPtr argument. If such an intersection exists it is
+ * returned via output argument 'projected_point' and the function returns true.
+ *
+ * @param[in] input The point that will be projected into the plane
+ * @param[out] projected_point The point projected into the plane, if it exists
+ * @param[in] plane The model coefficients describing the plane
+ * @returns true if an intersection of the created ray and the plane exists;
+ * false otherwise
+ */
+bool
+projectPointOnPlane (const PointType &input, PointType &projected_point, const ModelPtr plane);
+
+bool
+projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const ModelPtr plane);
+
 #endif // TRANSP_OBJ_RECON_TOOLS
