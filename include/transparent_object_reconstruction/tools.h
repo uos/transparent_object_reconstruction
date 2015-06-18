@@ -966,9 +966,13 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
  * false otherwise
  */
 bool
-projectPointOnPlane (const PointType &input, PointType &projected_point, const ModelPtr plane);
+projectPointOnPlane (const PointType &input, PointType &projected_point, const Eigen::Vector4f &plane);
 
 bool
-projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const ModelPtr plane);
+projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const Eigen::Vector4f &plane);
+
+template <class T, class U> T convert(const U&);
+
+template <class T, class U> void insert_coords (const T&, U&);
 
 #endif // TRANSP_OBJ_RECON_TOOLS

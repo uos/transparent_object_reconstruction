@@ -1,5 +1,149 @@
 #include <transparent_object_reconstruction/tools.h>
 
+template <>
+Eigen::Vector3f
+convert<Eigen::Vector3f, PointType> (const PointType &p)
+{
+  return Eigen::Vector3f (p.x, p.y, p.z);
+}
+
+template <>
+Eigen::Vector4f
+convert<Eigen::Vector4f, PointType> (const PointType &p)
+{
+  return Eigen::Vector4f (p.x, p.y, p.z, 0.0f);
+}
+
+template <>
+Eigen::Vector3f
+convert<Eigen::Vector3f, LabelPoint> (const LabelPoint &p)
+{
+  return Eigen::Vector3f (p.x, p.y, p.z);
+}
+
+template <>
+Eigen::Vector4f
+convert<Eigen::Vector4f, LabelPoint> (const LabelPoint &p)
+{
+  return Eigen::Vector4f (p.x, p.y, p.z, 0.0f);
+}
+
+template <>
+PointType
+convert<PointType, Eigen::Vector3f> (const Eigen::Vector3f &v)
+{
+  PointType p;
+  p.x = v[0];
+  p.y = v[1];
+  p.z = v[2];
+  return p;
+}
+
+template <>
+PointType
+convert<PointType, Eigen::Vector4f> (const Eigen::Vector4f &v)
+{
+  PointType p;
+  p.x = v[0];
+  p.y = v[1];
+  p.z = v[2];
+  return p;
+}
+
+template <>
+LabelPoint
+convert<LabelPoint, Eigen::Vector3f> (const Eigen::Vector3f &v)
+{
+  LabelPoint p;
+  p.x = v[0];
+  p.y = v[1];
+  p.z = v[2];
+  return p;
+}
+
+template <>
+LabelPoint
+convert<LabelPoint, Eigen::Vector4f> (const Eigen::Vector4f &v)
+{
+  LabelPoint p;
+  p.x = v[0];
+  p.y = v[1];
+  p.z = v[2];
+  return p;
+}
+
+template <>
+Eigen::Vector4f
+convert<Eigen::Vector4f, Model> (const Model &model)
+{
+  return Eigen::Vector4f::Map (&model.values[0], 4);
+}
+
+template <>
+Eigen::Vector4f
+convert<Eigen::Vector4f, ModelPtr> (const ModelPtr &model)
+{
+  return Eigen::Vector4f::Map (&model->values[0], 4);
+}
+
+template <>
+Model
+convert<Model, Eigen::Vector4f> (const Eigen::Vector4f &v)
+{
+  Model m;
+  for (size_t i = 0; i < 4; ++i)
+  {
+    m.values[i] = v[i];
+  }
+  return m;
+}
+
+template <>
+ModelPtr
+convert<ModelPtr, Eigen::Vector4f> (const Eigen::Vector4f &v)
+{
+  ModelPtr m (new Model);
+  for (size_t i = 0; i < 4; ++i)
+  {
+    m->values[i] = v[i];
+  }
+  return m;
+}
+template <>
+void
+insert_coords<Eigen::Vector3f, PointType> (const Eigen::Vector3f &source, PointType &target)
+{
+  target.x = source[0];
+  target.y = source[1];
+  target.z = source[2];
+}
+
+template <>
+void
+insert_coords<Eigen::Vector4f, PointType> (const Eigen::Vector4f &source, PointType &target)
+{
+  target.x = source[0];
+  target.y = source[1];
+  target.z = source[2];
+}
+
+template <>
+void
+insert_coords<Eigen::Vector3f, LabelPoint> (const Eigen::Vector3f &source, LabelPoint &target)
+{
+  target.x = source[0];
+  target.y = source[1];
+  target.z = source[2];
+}
+
+template <>
+void
+insert_coords<Eigen::Vector4f, LabelPoint> (const Eigen::Vector4f &source, LabelPoint &target)
+{
+  target.x = source[0];
+  target.y = source[1];
+  target.z = source[2];
+}
 
 void
 extractVoxelGridCellPoints (const CloudPtr &cloud,
