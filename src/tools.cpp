@@ -145,6 +145,40 @@ insert_coords<Eigen::Vector4f, LabelPoint> (const Eigen::Vector4f &source, Label
   target.z = source[2];
 }
 
+template<>
+bool
+lineWithPlaneIntersection<PointType> (const PointType &original_point, const Eigen::Vector4f &plane,
+    PointType &intersection_point, double angle_eps)
+{
+  Eigen::Vector3f origin = Eigen::Vector3f::Zero ();
+  Eigen::Vector3f query_point = convert<Eigen::Vector3f, PointType> (original_point);
+  Eigen::Vector4f result_point;
+  bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
+  intersection_point = original_point;
+  if (result)
+  {
+    insert_coords (result_point, intersection_point);
+  }
+  return result;
+}
+
+template<>
+bool
+lineWithPlaneIntersection<LabelPoint> (const LabelPoint &original_point, const Eigen::Vector4f &plane,
+    LabelPoint &intersection_point, double angle_eps)
+{
+  Eigen::Vector3f origin = Eigen::Vector3f::Zero ();
+  Eigen::Vector3f query_point = convert<Eigen::Vector3f, LabelPoint> (original_point);
+  Eigen::Vector4f result_point;
+  bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
+  intersection_point = original_point;
+  if (result)
+  {
+    insert_coords (result_point, intersection_point);
+  }
+  return result;
+}
+
 void
 extractVoxelGridCellPoints (const CloudPtr &cloud,
     pcl::VoxelGrid<PointType> &v_grid,
@@ -761,14 +795,14 @@ cropClusterHullByPlaneHull (Cloud::ConstPtr plane_convex_hull,
 bool 
 lineWithPlaneIntersection (const Eigen::Vector3f point_a,
                            const Eigen::Vector3f point_b,
-                           const pcl::ModelCoefficients &plane,
+                           const Eigen::Vector4f &plane,
                            Eigen::Vector4f &point, double angle_eps)
 {
   // first: construct the line from point_a and point_b
   Eigen::ParametrizedLine<float, 3> param_line = Eigen::ParametrizedLine<float, 3>::Through (point_a, point_b);
 
   // extract the plane normal from model coefficients 
-  Eigen::Vector3f plane_normal = Eigen::Vector3f::Map (&plane.values[0], 3);
+  Eigen::Vector3f plane_normal = Eigen::Vector3f::Map (&plane[0], 3);
 
   // check if line and plane are parallel
   Eigen::Vector3f line_dir3f = param_line.direction ();
@@ -784,40 +818,13 @@ lineWithPlaneIntersection (const Eigen::Vector3f point_a,
   }
 
   // create the hyperplane
-  Eigen::Hyperplane<float, 3> hyper_plane (plane_normal, plane.values[3]);
+  Eigen::Hyperplane<float, 3> hyper_plane (plane_normal, plane[3]);
 
   // calculate the intersection
   float distance = param_line.intersection (hyper_plane);
   Eigen::Vector3f intersection = distance * param_line.direction () + param_line.origin ();
   point = Eigen::Vector4f (intersection[0], intersection[1], intersection[2], 0.0f); 
   return true;
-}
-
-bool
-lineWithPlaneIntersection (const PointType original_point, 
-                           const Model &plane,
-                           PointType &intersection_point,
-                           double angle_eps)
-{
-  Eigen::Vector3f origin (0.0f, 0.0f, 0.0f);
-  Eigen::Vector3f query_point (original_point.x, original_point.y, original_point.z);
-  Eigen::Vector4f result_point;
-  bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
-  if (result)
-  {
-    // we want to copy all attributes first
-    intersection_point = original_point;
-    // adapt the xyz coordinates
-    intersection_point.x = result_point[0];
-    intersection_point.y = result_point[1];
-    intersection_point.z = result_point[2];
-  }
-  else
-  {
-    // just copy the contents of the original point
-    intersection_point = original_point;
-  }
-  return result;
 }
 
 void
@@ -899,11 +906,13 @@ projectCloudOnPlane (Cloud::ConstPtr input, CloudPtr projected_cloud, ModelPtr p
   projected_cloud->points.clear ();
   projected_cloud->points.reserve (input->points.size ());
   PointType intersection;
+  Eigen::Vector4f plane_coeff = Eigen::Vector4f (plane->values[0],
+      plane->values[1], plane->values[2], plane->values[3]);
 
   // iterate over input cloud
   for (size_t i = 0; i < input->points.size (); ++i)
   {
-    if (lineWithPlaneIntersection (input->points[i], *plane, intersection, LINE_PLANE_ANGLE_EPS))
+    if (lineWithPlaneIntersection (input->points[i], plane_coeff, intersection, LINE_PLANE_ANGLE_EPS))
       projected_cloud->points.push_back (intersection);
   }
 
@@ -2028,13 +2037,13 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
 }
 
 bool
-projectPointOnPlane (const PointType &input, PointType &projected_point, const ModelPtr plane)
+projectPointOnPlane (const PointType &input, PointType &projected_point, const Eigen::Vector4f &plane)
 {
-  return lineWithPlaneIntersection (input, *plane, projected_point, LINE_PLANE_ANGLE_EPS);
+  return lineWithPlaneIntersection (input, plane, projected_point, LINE_PLANE_ANGLE_EPS);
 }
 
 bool
-projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const ModelPtr plane)
+projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const Eigen::Vector4f &plane)
 {
   PointType tmp_i, tmp_p;
   tmp_i.x = input.x;

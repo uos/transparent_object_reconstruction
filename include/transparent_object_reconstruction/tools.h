@@ -336,27 +336,8 @@ cropClusterHullByPlaneHull (Cloud::ConstPtr plane_convex_hull,
  **/
 bool 
 lineWithPlaneIntersection (const Eigen::Vector3f point_a,
-    const Eigen::Vector3f point_b, const pcl::ModelCoefficients &plane,
+    const Eigen::Vector3f point_b, const Eigen::Vector4f &plane,
     Eigen::Vector4f &point, double angle_eps);
-/**
- * Function to compute the intersection between a line and a plane.
- * This function is very similar to the 5 argument function with the
- * same name. However the first point on the line is in this case fixed
- * to be the origin (0,0,0), so that only on other point on the line
- * needs to be specified. If an intersection exists, this is returned via
- * the output argument and the function returns true. Otherwise it will
- * return false and the intersection will be set to 'original_point'.
- *
- * @param[in] original_point Point on the line
- * @param[in] plane The coefficients for the plane
- * @param[out] intersection_point Intersection between line and plane if
- *   it exists.
- * @param[in] angle_eps Threshold to check for parallelity
- * @return true if the line intersects the plane; false otherwise
- **/
-bool
-lineWithPlaneIntersection (const PointType original_point,
-    const Model &plane, PointType &intersection_point, double angle_eps);
 
 /**
  * Method to refine the inliers of several (at least 2) planes.
@@ -974,5 +955,25 @@ projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const
 template <class T, class U> T convert(const U&);
 
 template <class T, class U> void insert_coords (const T&, U&);
+
+/**
+ * Templated function to compute the intersection between a line and a plane.
+ * This function is very similar to the 5 argument function with the
+ * same name. However the first point on the line is in this case fixed
+ * to be the origin (0,0,0), so that only on other point on the line
+ * needs to be specified. If an intersection exists, this is returned via
+ * the output argument and the function returns true. Otherwise it will
+ * return false and the intersection will be set to 'original_point'.
+ *
+ * @param[in] original_point Point on the line
+ * @param[in] plane The coefficients for the plane
+ * @param[out] intersection_point Intersection between line and plane if
+ *   it exists.
+ * @param[in] angle_eps Threshold to check for parallelity
+ * @return true if the line intersects the plane; false otherwise
+ **/
+
+template <class T> bool lineWithPlaneIntersection (const T &original_point, const Eigen::Vector4f &plane,
+    T &intersection_point, double angle_eps);
 
 #endif // TRANSP_OBJ_RECON_TOOLS
