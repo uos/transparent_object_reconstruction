@@ -527,7 +527,7 @@ class HoleIntersector
       }
 
       bool missing_label = false;
-      size_t min_points_per_label = 1; // TODO: change this value dynammically dependent on overal number of points in leaf?
+      size_t min_points_per_label = 1; // TODO: change this value dynammically dependent on total number of points in leaf?
 
       detected_label = leaf_labels.begin ();
       while (detected_label != leaf_labels.end ())

@@ -25,6 +25,7 @@
 #include <limits>
 
 #include<transparent_object_reconstruction/Holes.h>
+#include<transparent_object_reconstruction/tools.h>
 
 struct HoleDetector
 {
@@ -509,7 +510,7 @@ struct HoleDetector
         std::vector<int>::const_iterator hull_it = conv_border_indices.indices.begin ();
         while (hull_it != conv_border_indices.indices.end ())
         {
-          convex_hull_polygon.push_back (inside_borders[i][*hull_it++]);    
+          convex_hull_polygon.push_back (inside_borders[i][*hull_it++]);
         }
         // store indices of points that are inside the convex hull - these will be removed later
         addRemoveIndices (input, convex_hull_polygon, remove_indices);
@@ -521,7 +522,94 @@ struct HoleDetector
         pcl_conversions::fromPCL (tmp_cloud, pc2);
         // TODO: check if header information is copied as well (and if it is set in the first palce)
         (*holes_mgs_).convex_hulls.push_back (pc2);
-        
+      }
+      // work on the holes that are partially inside the convex hull
+      for (size_t i = 0; i < overlap_borders.size (); ++i)
+      {
+        PointT p;
+        unsigned int inside_points = 0;
+        double dist_sum = 0.0f;
+        coord_it = overlap_borders[i].begin ();
+        // check for alignment of the points that are considered in the convex hull
+        while (coord_it != overlap_borders[i].end ())
+        {
+          if (pointInPolygon2D (hull_2Dcoords, *coord_it))
+          {
+            dist_sum += ::pcl::pointToPlaneDistance (input->at ((*coord_it)[0], (*coord_it)[1]), plane_coefficients);
+            inside_points++;
+          }
+          coord_it++;
+        }
+        double avg_dist = dist_sum / static_cast<double> (inside_points);
+        if (avg_dist > *plane_dist_threshold_ * 3.0f) // TODO: perhaps remove the points with the largest 3 distances instead?
+        {
+          //skip hole! should something more be done?
+          continue;
+        }
+        auto border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+        border_cloud->points.reserve (overlap_borders[i].size ());
+        coord_it = overlap_borders[i].begin ();
+        PointT border_p, projection;
+        PointType tmp_p, tmp_projection;
+        while (coord_it != overlap_borders[i].end ())
+        {
+          border_p = input->at ((*coord_it)[0], (*coord_it)[1]);
+          if (::pcl::pointToPlaneDistance (border_p, plane_coefficients) > *plane_dist_threshold_ * 2.0f)
+          {
+            // use raytracing to project into plane
+            tmp_p.x = p.x;
+            tmp_p.y = p.y;
+            tmp_p.z = p.z;
+            if (projectPointOnPlane (tmp_p, tmp_projection, plane_coefficients))
+            {
+              projection.x = tmp_projection.x;
+              projection.y = tmp_projection.y;
+              projection.x = tmp_projection.x;
+              border_cloud->points.push_back (projection);
+            }
+          }
+          else
+          {
+            border_cloud->points.push_back (border_p);
+          }
+        }
+        if (border_cloud->points.size () > 0)
+        {
+          // make sure that all border points are in the plane
+          auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+          typename ::pcl::ProjectInliers<PointT> proj_border;
+          proj_border.setInputCloud (border_cloud);
+          proj_border.setModelType (::pcl::SACMODEL_PLANE);
+          proj_border.setModelCoefficients (*model_);
+          proj_border.filter (*proj_border_cloud);
+
+          // compute convex hull of projected border
+          auto conv_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+          ::pcl::PointIndices conv_border_indices;
+          typename ::pcl::ConvexHull<PointT> c_hull;
+          c_hull.setInputCloud (proj_border_cloud);
+          c_hull.setDimension (2);
+          c_hull.reconstruct (*conv_border_cloud);
+          c_hull.getHullPointIndices (conv_border_indices);
+
+          std::vector<Eigen::Vector2i> convex_hull_polygon;
+          convex_hull_polygon.reserve (conv_border_indices.indices.size ());
+          std::vector<int>::const_iterator hull_it = conv_border_indices.indices.begin ();
+          while (hull_it != conv_border_indices.indices.end ())
+          {
+            convex_hull_polygon.push_back (inside_borders[i][*hull_it++]);
+          }
+          // store indices of points that are inside the convex hull - these will be removed later
+          addRemoveIndices (input, convex_hull_polygon, remove_indices);
+
+          // add current hole to Hole message
+          sensor_msgs::PointCloud2 pc2;
+          ::pcl::PCLPointCloud2 tmp_cloud;
+          ::pcl::toPCLPointCloud2 (*conv_border_cloud, tmp_cloud);
+          pcl_conversions::fromPCL (tmp_cloud, pc2);
+          // TODO: check if header information is copied as well (and if it is set in the first palce)
+          (*holes_mgs_).convex_hulls.push_back (pc2);
+        }
 
       }
 
