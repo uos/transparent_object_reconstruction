@@ -285,7 +285,7 @@ struct HoleDetector
     inputs.declare<::pcl::PointIndices::ConstPtr> ("hull_indices", "The indices describing the convex hull to the table surface.");
     inputs.declare<::pcl::ModelCoefficients::ConstPtr> ("model", "Model coefficients for the planar table surface.");
     outputs.declare<ecto::pcl::PointCloud> ("output", "Filtered Cloud.");
-    outputs.declare<transparent_object_reconstruction::Holes> ("holes", "Detected holes inside the table convex hull.");
+    outputs.declare<transparent_object_reconstruction::Holes::ConstPtr> ("holes", "Detected holes inside the table convex hull.");
   }
 
   void configure( const tendrils& params, const tendrils& inputs, const tendrils& outputs)
@@ -461,8 +461,10 @@ struct HoleDetector
 
       Eigen::Vector4f plane_coefficients ((*model_)->values[0], (*model_)->values[1],
           (*model_)->values[2], (*model_)->values[3]);
+
       // create representations for the holes in the plane (atm only for complete hulls)
-      (*holes_mgs_).convex_hulls.reserve (inside_holes.size ());
+      auto holes_msg= boost::make_shared<transparent_object_reconstruction::Holes>();
+      holes_msg->convex_hulls.reserve (inside_holes.size ());
       for (size_t i = 0; i < inside_holes.size (); ++i)
       {
         auto border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
@@ -519,7 +521,7 @@ struct HoleDetector
         sensor_msgs::PointCloud2 pc2;
         pcl::toROSMsg (*conv_border_cloud, pc2);
         // TODO: check if header information is copied as well (and if it is set in the first palce)
-        (*holes_mgs_).convex_hulls.push_back (pc2);
+        holes_msg->convex_hulls.push_back (pc2);
       }
       // work on the holes that are partially inside the convex hull
       for (size_t i = 0; i < overlap_borders.size (); ++i)
@@ -604,7 +606,7 @@ struct HoleDetector
           sensor_msgs::PointCloud2 pc2;
           pcl::toROSMsg (*conv_border_cloud, pc2);
           // TODO: check if header information is copied as well (and if it is set in the first palce)
-          (*holes_mgs_).convex_hulls.push_back (pc2);
+          holes_msg->convex_hulls.push_back (pc2);
         }
 
       }
@@ -619,6 +621,7 @@ struct HoleDetector
       extractor.filter (*filtered_cloud);
 
       *output_ = ecto::pcl::xyz_cloud_variant_t (filtered_cloud);
+      *holes_mgs_ = holes_msg;
 
       return ecto::OK;
     }
@@ -629,7 +632,7 @@ struct HoleDetector
   ecto::spore<::pcl::PointIndices> hull_indices_;
   ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_; //TODO: is this what I get from the segmentation?
   ecto::spore<ecto::pcl::PointCloud> output_;
-  ecto::spore<transparent_object_reconstruction::Holes> holes_mgs_;
+  ecto::spore<transparent_object_reconstruction::Holes::ConstPtr> holes_mgs_;
 };
 
 ECTO_CELL(hole_detection, ecto::pcl::PclCell<HoleDetector>,
