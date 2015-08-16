@@ -517,9 +517,7 @@ struct HoleDetector
 
         // add current hole to Hole message
         sensor_msgs::PointCloud2 pc2;
-        ::pcl::PCLPointCloud2 tmp_cloud;
-        ::pcl::toPCLPointCloud2 (*conv_border_cloud, tmp_cloud);
-        pcl_conversions::fromPCL (tmp_cloud, pc2);
+        pcl::toROSMsg (*conv_border_cloud, pc2);
         // TODO: check if header information is copied as well (and if it is set in the first palce)
         (*holes_mgs_).convex_hulls.push_back (pc2);
       }
@@ -604,9 +602,7 @@ struct HoleDetector
 
           // add current hole to Hole message
           sensor_msgs::PointCloud2 pc2;
-          ::pcl::PCLPointCloud2 tmp_cloud;
-          ::pcl::toPCLPointCloud2 (*conv_border_cloud, tmp_cloud);
-          pcl_conversions::fromPCL (tmp_cloud, pc2);
+          pcl::toROSMsg (*conv_border_cloud, pc2);
           // TODO: check if header information is copied as well (and if it is set in the first palce)
           (*holes_mgs_).convex_hulls.push_back (pc2);
         }
