@@ -118,5 +118,5 @@ pubsub_gen_wrap(transparent_object_reconstruction DESTINATION ${PROJECT_NAME} IN
 ectomodule(hole_detection DESTINATION ${PROJECT_NAME} INSTALL
   src/ecto/HoleDetector.cpp
   src/ecto/module.cpp)
-link_ecto(hole_detection ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+link_ecto(hole_detection ${catkin_LIBRARIES} ${PCL_LIBRARIES} tools)
 add_dependencies(hole_detection_ectomodule ${PROJECT_NAME}_generate_messages_cpp)
