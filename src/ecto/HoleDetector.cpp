@@ -300,10 +300,10 @@ struct HoleDetector
   }
 
   template <typename PointT>
-    int process( const tendrils& inputs, const tendrils& outputs, 
+    int process( const tendrils& inputs, const tendrils& outputs,
         boost::shared_ptr<const ::pcl::PointCloud<PointT> >& input)
     {
-      Eigen::Affine3f trans;    
+      Eigen::Affine3f trans;
       Eigen::Affine3f back_trans;
       Eigen::Vector3f center = Eigen::Vector3f::Zero ();
       Eigen::Vector3f plane_normal = Eigen::Vector3f ((*model_)->values[0],
@@ -455,7 +455,7 @@ struct HoleDetector
         all_borders_it++;
       }
       // create array to store all non nan-points that are enclosed by the hole
-      // and should be removed before clustering 
+      // and should be removed before clustering
       ::pcl::PointIndices::Ptr remove_indices (new ::pcl::PointIndices);
       std::vector<Eigen::Vector2i>::const_iterator coord_it;
 
