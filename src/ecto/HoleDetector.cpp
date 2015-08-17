@@ -169,7 +169,7 @@ struct HoleDetector
     {
       // check dimension
       if (column < 0 || row < 0 ||
-          column >= cloud->width || row >= cloud->width)
+          column >= cloud->width || row >= cloud->height)
         return;
       // check if already visited and nan-point -- borders may be part of two neighboring regions
       auto p = cloud->at (column, row);
