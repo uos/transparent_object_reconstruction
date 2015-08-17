@@ -417,11 +417,10 @@ struct HoleDetector
 
       while (all_holes_it != all_hole_2Dcoords.end ())
       {
-        hole_it = all_holes_it->begin ();
         inside = outside = 0;
+        hole_it = all_holes_it->begin ();
         while (hole_it != all_holes_it->end ())
         {
-          hole_it++;
           if (pointInPolygon2D (hull_2Dcoords, *hole_it))
           {
             inside++;
@@ -430,26 +429,27 @@ struct HoleDetector
           {
             outside++;
           }
-          // TODO: probably some fraction dependent on min_hole_size_ should be used
-          if (outside > 0)
+          hole_it++;
+        }
+        // TODO: probably some fraction dependent on min_hole_size_ should be used
+        if (outside > 0)
+        {
+          if (outside > inside * (*inside_out_factor_))
           {
-            if (outside > inside * (*inside_out_factor_))
-            {
-              // TODO: could we use these later somewhere or can they be safely discarded?
-              outside_holes.push_back (*all_holes_it);
-              outside_borders.push_back (*all_borders_it);
-            }
-            else
-            {
-              overlap_holes.push_back (*all_holes_it);
-              overlap_borders.push_back (*all_borders_it);
-            }
+            // TODO: could we use these later somewhere or can they be safely discarded?
+            outside_holes.push_back (*all_holes_it);
+            outside_borders.push_back (*all_borders_it);
           }
           else
           {
-            inside_holes.push_back (*all_holes_it);
-            inside_borders.push_back (*all_borders_it);
+            overlap_holes.push_back (*all_holes_it);
+            overlap_borders.push_back (*all_borders_it);
           }
+        }
+        else
+        {
+          inside_holes.push_back (*all_holes_it);
+          inside_borders.push_back (*all_borders_it);
         }
         all_holes_it++;
         all_borders_it++;
@@ -572,6 +572,7 @@ struct HoleDetector
           {
             border_cloud->points.push_back (border_p);
           }
+          coord_it++;
         }
         if (border_cloud->points.size () > 0)
         {
