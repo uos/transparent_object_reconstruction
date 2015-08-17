@@ -50,7 +50,8 @@ catkin_package(
 #  DEPENDS system_lib
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+add_compile_options("-std=c++11")
+#add_compile_options("-O0" "-g")
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
