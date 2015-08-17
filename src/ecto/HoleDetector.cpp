@@ -368,7 +368,7 @@ struct HoleDetector
       std::vector<Eigen::Vector2i> hull_2Dcoords;
       std::vector<std::vector<Eigen::Vector2i> > all_hole_2Dcoords;
       std::vector<std::vector<Eigen::Vector2i> > all_border_2Dcoords;
-      getBoundingBox2DConvexHull (input, *hull_indices_, table_min, table_max, hull_2Dcoords);
+      getBoundingBox2DConvexHull (input, **hull_indices_, table_min, table_max, hull_2Dcoords);
 
       std::vector<std::vector<bool> > visited (input->width, std::vector<bool> (input->height, false));
 
@@ -629,7 +629,7 @@ struct HoleDetector
   ecto::spore<size_t> min_hole_size_;
   ecto::spore<float> inside_out_factor_;
   ecto::spore<float> plane_dist_threshold_;
-  ecto::spore<::pcl::PointIndices> hull_indices_;
+  ecto::spore<::pcl::PointIndices::ConstPtr> hull_indices_;
   ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_; //TODO: is this what I get from the segmentation?
   ecto::spore<ecto::pcl::PointCloud> output_;
   ecto::spore<transparent_object_reconstruction::Holes::ConstPtr> holes_mgs_;
