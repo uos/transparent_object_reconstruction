@@ -550,23 +550,18 @@ struct HoleDetector
         border_cloud->points.reserve (overlap_borders[i].size ());
         coord_it = overlap_borders[i].begin ();
         PointT border_p, projection;
-        PointType tmp_p, tmp_projection;
         while (coord_it != overlap_borders[i].end ())
         {
           border_p = input->at ((*coord_it)[0], (*coord_it)[1]);
           if (::pcl::pointToPlaneDistance (border_p, plane_coefficients) > *plane_dist_threshold_ * 2.0f)
           {
-            // use raytracing to project into plane
-            tmp_p.x = border_p.x;
-            tmp_p.y = border_p.y;
-            tmp_p.z = border_p.z;
-            if (projectPointOnPlane (tmp_p, tmp_projection, plane_coefficients))
+            // compute perspective projection of border point onto plane
+            if (projectPointOnPlane2<PointT> (border_p, projection, plane_coefficients))
             {
-              projection.x = tmp_projection.x;
-              projection.y = tmp_projection.y;
-              projection.z = tmp_projection.z;
+              // if a projection exists, add it to the border cloud
               border_cloud->points.push_back (projection);
             }
+            // otherwise discard this point
           }
           else
           {
