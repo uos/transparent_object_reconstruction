@@ -359,11 +359,6 @@ struct HoleDetector
       calcPlaneTransformation (plane_normal, center, trans);
       back_trans = trans.inverse ();
 
-      // TODO: check why I need / do transformation into x-y-plane?
-      auto transformed_inliers = boost::make_shared<::pcl::PointCloud<PointT> > ();
-      auto transformed_hull = boost::make_shared<::pcl::PointCloud<PointT> > ();
-      ::pcl::transformPointCloud (*input, *transformed_inliers, trans);
-
       Eigen::Vector2i table_min, table_max;
       std::vector<Eigen::Vector2i> hull_2Dcoords;
       std::vector<std::vector<Eigen::Vector2i> > all_hole_2Dcoords;
