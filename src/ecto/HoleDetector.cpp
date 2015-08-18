@@ -472,6 +472,10 @@ struct HoleDetector
           border_cloud->points.push_back (input->at ((*coord_it)[0], (*coord_it)[1]));
           coord_it++;
         }
+        // set dimensions of border cloud
+        border_cloud->width = border_cloud->points.size ();
+        border_cloud->height = 1;
+
         double dist_sum = .0f;
         auto border_it = border_cloud->points.begin ();
 
@@ -573,6 +577,9 @@ struct HoleDetector
         }
         if (border_cloud->points.size () > 0)
         {
+          // set dimensions of border cloud
+          border_cloud->width = border_cloud->points.size ();
+          border_cloud->height = 1;
           // make sure that all border points are in the plane
           auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
           typename ::pcl::ProjectInliers<PointT> proj_border;
