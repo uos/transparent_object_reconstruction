@@ -286,6 +286,7 @@ struct HoleDetector
     inputs.declare<::pcl::ModelCoefficients::ConstPtr> ("model", "Model coefficients for the planar table surface.");
     outputs.declare<ecto::pcl::PointCloud> ("output", "Filtered Cloud.");
     outputs.declare<transparent_object_reconstruction::Holes::ConstPtr> ("holes", "Detected holes inside the table convex hull.");
+    outputs.declare<::pcl::PointIndices::ConstPtr> ("remove_indices", "Indices of points inside the detected holes.");
   }
 
   void configure( const tendrils& params, const tendrils& inputs, const tendrils& outputs)
@@ -297,6 +298,7 @@ struct HoleDetector
     model_ = inputs["model"];
     output_ = outputs["output"];
     holes_mgs_ = outputs["holes"];
+    remove_indices_ = outputs["remove_indices"];
   }
 
   template <typename PointT>
@@ -607,6 +609,30 @@ struct HoleDetector
 
       }
 
+      if (remove_indices->indices.size () > 1)
+      {
+        // depending on what we want to do later it might be more convenient, if the remove indices are ordered
+        ::std::sort (remove_indices->indices.begin (), remove_indices->indices.end ());
+        // copy indices into output (and make sure that no index is inserted more than once
+        ::pcl::PointIndices::Ptr tmp_indices (new ::pcl::PointIndices);
+        tmp_indices->indices.reserve (remove_indices->indices.size ());
+        std::vector<int>::const_iterator index_it = remove_indices->indices.begin ();
+        tmp_indices->indices.push_back (*index_it++);
+        while (index_it != remove_indices->indices.end ())
+        {
+          if (*index_it != tmp_indices->indices.back ())
+          {
+            tmp_indices->indices.push_back (*index_it);
+          }
+          index_it++;
+        }
+        *remove_indices_ = tmp_indices;
+      }
+      else
+      {
+        *remove_indices_ = remove_indices;
+      }
+
       // set all points in the point cloud to nan, if their index was contained in remove_indices
       typename ::pcl::ExtractIndices<PointT> extractor;
       auto filtered_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
@@ -629,6 +655,7 @@ struct HoleDetector
   ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_; //TODO: is this what I get from the segmentation?
   ecto::spore<ecto::pcl::PointCloud> output_;
   ecto::spore<transparent_object_reconstruction::Holes::ConstPtr> holes_mgs_;
+  ecto::spore<::pcl::PointIndices::ConstPtr> remove_indices_;
 };
 
 ECTO_CELL(hole_detection, ecto::pcl::PclCell<HoleDetector>,
