@@ -2055,6 +2055,7 @@ projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const
     projected_point.x = tmp_p.x;
     projected_point.y = tmp_p.y;
     projected_point.z = tmp_p.z;
+    return true;
   }
   return false;
 }
