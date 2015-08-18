@@ -527,7 +527,6 @@ struct HoleDetector
       // work on the holes that are partially inside the convex hull
       for (size_t i = 0; i < overlap_borders.size (); ++i)
       {
-        PointT p;
         unsigned int inside_points = 0;
         double dist_sum = 0.0f;
         coord_it = overlap_borders[i].begin ();
@@ -558,15 +557,11 @@ struct HoleDetector
           if (::pcl::pointToPlaneDistance (border_p, plane_coefficients) > *plane_dist_threshold_ * 2.0f)
           {
             // use raytracing to project into plane
-            tmp_p.x = p.x;
-            tmp_p.y = p.y;
-            tmp_p.z = p.z;
+            tmp_p.x = border_p.x;
+            tmp_p.y = border_p.y;
+            tmp_p.z = border_p.z;
             if (projectPointOnPlane (tmp_p, tmp_projection, plane_coefficients))
             {
-              // TODO: perhaps use something different from color to mark points?
-              // mark points (via color) as projections
-              projection.r = 0;
-              projection.g = projection.b = 255;
               projection.x = tmp_projection.x;
               projection.y = tmp_projection.y;
               projection.z = tmp_projection.z;
