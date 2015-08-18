@@ -976,4 +976,45 @@ template <class T, class U> void insert_coords (const T&, U&);
 template <class T> bool lineWithPlaneIntersection (const T &original_point, const Eigen::Vector4f &plane,
     T &intersection_point, double angle_eps);
 
+/**
+ * @brief: Templated function to compute the perspective projection of a point
+ * onto a plane.
+ * Perspective projection is done by computing the intersection of the line
+ * defined by the point and the origin with the given plane. If the intersection
+ * exists the function returns true and the intersection is returned via the
+ * output argument. Otherwise the function will return false and the output
+ * argument will hold a copy of the query point. Note that all attributes of the
+ * given point apart from spatial information (if the exist) are retained in the
+ * intersection; in some cases (point normals) these should be recomputed
+ * afterwards.
+ * @param[in] point The point that is to be projected
+ * @param[out] projected_point The projected point, if it exists, otherwise a
+ *  copy of 'point'
+ * @param[in] plane The plane coefficients
+ * @param[in] angle_eps Threshold to determine if the line defined by the origin
+ *  and 'point' is parallel to the given plane
+ * @returns true if the point could be projected onto the plane, false otherwise
+ */
+//TODO: clean up old projection code and rename this function later...
+template <typename PointT> inline bool
+projectPointOnPlane2 (const PointT &point, PointT &projected_point, const Eigen::Vector4f &plane,
+    double angle_eps = LINE_PLANE_ANGLE_EPS)
+{
+  // copy point attributes into output
+  projected_point = point;
+  Eigen::Vector3f origin = Eigen::Vector3f::Zero ();
+  Eigen::Vector3f query_point (point.x, point.y, point.z);
+  Eigen::Vector4f result_point;
+  // check if the line defined by 'point' and the origin intersects the plane
+  bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
+  // copy location of intersection, if it exists
+  if (result)
+  {
+    projected_point.x = result_point[0];
+    projected_point.y = result_point[1];
+    projected_point.z = result_point[2];
+  }
+  return result;
+}
+
 #endif // TRANSP_OBJ_RECON_TOOLS
