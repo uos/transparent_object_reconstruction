@@ -563,9 +563,13 @@ struct HoleDetector
             tmp_p.z = p.z;
             if (projectPointOnPlane (tmp_p, tmp_projection, plane_coefficients))
             {
+              // TODO: perhaps use something different from color to mark points?
+              // mark points (via color) as projections
+              projection.r = 0;
+              projection.g = projection.b = 255;
               projection.x = tmp_projection.x;
               projection.y = tmp_projection.y;
-              projection.x = tmp_projection.x;
+              projection.z = tmp_projection.z;
               border_cloud->points.push_back (projection);
             }
           }
