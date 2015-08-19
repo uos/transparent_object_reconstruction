@@ -465,6 +465,7 @@ struct HoleDetector
       for (size_t i = 0; i < inside_holes.size (); ++i)
       {
         auto border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+        border_cloud->header = input->header;
         border_cloud->points.reserve (inside_borders[i].size ());
         coord_it = inside_borders[i].begin ();
         while (coord_it != inside_borders[i].end ())
@@ -521,7 +522,6 @@ struct HoleDetector
         // add current hole to Hole message
         sensor_msgs::PointCloud2 pc2;
         pcl::toROSMsg (*conv_border_cloud, pc2);
-        // TODO: check if header information is copied as well (and if it is set in the first palce)
         holes_msg->convex_hulls.push_back (pc2);
       }
       // work on the holes that are partially inside the convex hull
@@ -547,6 +547,7 @@ struct HoleDetector
           continue;
         }
         auto border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+        border_cloud->header = input->header;
         border_cloud->points.reserve (overlap_borders[i].size ());
         coord_it = overlap_borders[i].begin ();
         PointT border_p, projection;
@@ -604,7 +605,6 @@ struct HoleDetector
           // add current hole to Hole message
           sensor_msgs::PointCloud2 pc2;
           pcl::toROSMsg (*conv_border_cloud, pc2);
-          // TODO: check if header information is copied as well (and if it is set in the first palce)
           holes_msg->convex_hulls.push_back (pc2);
         }
 
