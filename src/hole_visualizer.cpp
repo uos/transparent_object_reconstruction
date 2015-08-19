@@ -84,7 +84,7 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
   pcl::PCLPointCloud2 tmp_cloud;
 
   visualization_msgs::Marker clear_marker;
-  clear_marker.ns= "table_holes";
+  clear_marker.ns = "table_holes";
   // DELETEALL is not officially around before jade
   clear_marker.action = 3;
   vis_pub.publish (clear_marker);

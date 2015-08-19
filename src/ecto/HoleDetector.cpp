@@ -501,6 +501,7 @@ struct HoleDetector
         double dist_sum = .0f;
         auto border_it = border_cloud->points.begin ();
 
+        // check if hole border aligns with tabletop (or hole was caused by noise of tabletop obj)
         while (border_it != border_cloud->points.end ())
         {
           dist_sum += ::pcl::pointToPlaneDistance (*border_it++, plane_coefficients);
@@ -606,7 +607,6 @@ struct HoleDetector
           pcl::toROSMsg (*conv_border_cloud, pc2);
           holes_msg->convex_hulls.push_back (pc2);
         }
-
       }
 
       if (remove_indices->indices.size () > 1)
