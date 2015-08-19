@@ -106,6 +106,7 @@ struct HoleDetector
         for (int v = min[1]; v < max[1]; ++v)
         {
           query_point[1] = v;
+          // check if point is inside the convex hull
           if (pointInPolygon2D (convex_hull, query_point))
           {
             if (::pcl::isFinite (cloud->at (u, v)))
@@ -492,6 +493,7 @@ struct HoleDetector
         }
 
         // project border into plane
+        // TODO: which projection (perspective, closest dist) should be used here?
         auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
         typename ::pcl::ProjectInliers<PointT> proj_border;
         proj_border.setInputCloud (border_cloud);
@@ -524,6 +526,7 @@ struct HoleDetector
         // TODO: check if header information is copied as well (and if it is set in the first palce)
         holes_msg->convex_hulls.push_back (pc2);
       }
+      // TODO: determine if we can do some refactoring here, concerning the code that is shared with the completely enclosed holes...
       // work on the holes that are partially inside the convex hull
       for (size_t i = 0; i < overlap_borders.size (); ++i)
       {
@@ -575,6 +578,7 @@ struct HoleDetector
           border_cloud->width = border_cloud->points.size ();
           border_cloud->height = 1;
           // make sure that all border points are in the plane
+          // TODO: which projection (perspective, closest dist) should be used here?
           auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
           typename ::pcl::ProjectInliers<PointT> proj_border;
           proj_border.setInputCloud (border_cloud);
@@ -634,6 +638,7 @@ struct HoleDetector
         *remove_indices_ = remove_indices;
       }
 
+      // TODO: do we still need the filtered point cloud as output?
       // set all points in the point cloud to nan, if their index was contained in remove_indices
       typename ::pcl::ExtractIndices<PointT> extractor;
       auto filtered_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
