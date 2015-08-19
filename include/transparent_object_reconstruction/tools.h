@@ -982,11 +982,12 @@ template <class T> bool lineWithPlaneIntersection (const T &original_point, cons
  * Perspective projection is done by computing the intersection of the line
  * defined by the point and the origin with the given plane. If the intersection
  * exists the function returns true and the intersection is returned via the
- * output argument. Otherwise the function will return false and the output
- * argument will hold a copy of the query point. Note that all attributes of the
- * given point apart from spatial information (if the exist) are retained in the
- * intersection; in some cases (point normals) these should be recomputed
- * afterwards.
+ * output argument. Otherwise the function will return false.
+ * Note that the output argument  will retain all point attributes of the input
+ * point, apart from its position, if the point cloud be projected into the plane.
+ * If the point could not be projected into the plane, the output argument is not
+ * modified, i.e., it still contains the attribute values it contained before the
+ * function call.
  * @param[in] point The point that is to be projected
  * @param[out] projected_point The projected point, if it exists, otherwise a
  *  copy of 'point'
@@ -1001,7 +1002,6 @@ projectPointOnPlane2 (const PointT &point, PointT &projected_point, const Eigen:
     double angle_eps = LINE_PLANE_ANGLE_EPS)
 {
   // copy point attributes into output
-  projected_point = point;
   Eigen::Vector3f origin = Eigen::Vector3f::Zero ();
   Eigen::Vector3f query_point (point.x, point.y, point.z);
   Eigen::Vector4f result_point;
@@ -1010,6 +1010,7 @@ projectPointOnPlane2 (const PointT &point, PointT &projected_point, const Eigen:
   // copy location of intersection, if it exists
   if (result)
   {
+    projected_point = point;
     projected_point.x = result_point[0];
     projected_point.y = result_point[1];
     projected_point.z = result_point[2];
