@@ -73,6 +73,26 @@ struct HoleDetector
   }
 
   template <typename PointT>
+    void projectBorderAndCreateHull (const boost::shared_ptr<::pcl::PointCloud<PointT> > &border_cloud,
+        boost::shared_ptr<::pcl::PointCloud<PointT> > &convex_hull, ::pcl::PointIndices &convex_hull_indices)
+    {
+      // TODO: which projection (perspective, closest dist) should be used here?
+      auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+      typename ::pcl::ProjectInliers<PointT> proj_border;
+      proj_border.setInputCloud (border_cloud);
+      proj_border.setModelType (pcl::SACMODEL_PLANE);
+      proj_border.setModelCoefficients (*model_);
+      proj_border.filter (*proj_border_cloud);
+
+      // compute the convex hull of the (projected) border and retrieve the point indices
+      typename ::pcl::ConvexHull<PointT> c_hull;
+      c_hull.setInputCloud (proj_border_cloud);
+      c_hull.setDimension (2);
+      c_hull.reconstruct (*convex_hull);
+      c_hull.getHullPointIndices (convex_hull_indices);
+    }
+
+  template <typename PointT>
     void addRemoveIndices (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
         const std::vector<Eigen::Vector2i> &convex_hull,
         ::pcl::PointIndices::Ptr &remove_indices)
@@ -493,23 +513,10 @@ struct HoleDetector
           continue;
         }
 
-        // project border into plane
-        // TODO: which projection (perspective, closest dist) should be used here?
-        auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
-        typename ::pcl::ProjectInliers<PointT> proj_border;
-        proj_border.setInputCloud (border_cloud);
-        proj_border.setModelType (pcl::SACMODEL_PLANE);
-        proj_border.setModelCoefficients (*model_);
-        proj_border.filter (*proj_border_cloud);
-
-        // compute the convex hull of the (projected) border
+        // project border into plane and retrieve convex hull
         auto conv_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
         ::pcl::PointIndices conv_border_indices;
-        typename ::pcl::ConvexHull<PointT> c_hull;
-        c_hull.setInputCloud (proj_border_cloud);
-        c_hull.setDimension (2);
-        c_hull.reconstruct (*conv_border_cloud);
-        c_hull.getHullPointIndices (conv_border_indices);
+        projectBorderAndCreateHull (border_cloud, conv_border_cloud, conv_border_indices);
 
         std::vector<Eigen::Vector2i> convex_hull_polygon;
         convex_hull_polygon.reserve (conv_border_indices.indices.size ());
@@ -578,23 +585,11 @@ struct HoleDetector
           // set dimensions of border cloud
           border_cloud->width = border_cloud->points.size ();
           border_cloud->height = 1;
-          // make sure that all border points are in the plane
-          // TODO: which projection (perspective, closest dist) should be used here?
-          auto proj_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
-          typename ::pcl::ProjectInliers<PointT> proj_border;
-          proj_border.setInputCloud (border_cloud);
-          proj_border.setModelType (::pcl::SACMODEL_PLANE);
-          proj_border.setModelCoefficients (*model_);
-          proj_border.filter (*proj_border_cloud);
 
-          // compute convex hull of projected border
+          // project border into plane and retrieve convex hull
           auto conv_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
           ::pcl::PointIndices conv_border_indices;
-          typename ::pcl::ConvexHull<PointT> c_hull;
-          c_hull.setInputCloud (proj_border_cloud);
-          c_hull.setDimension (2);
-          c_hull.reconstruct (*conv_border_cloud);
-          c_hull.getHullPointIndices (conv_border_indices);
+          projectBorderAndCreateHull (border_cloud, conv_border_cloud, conv_border_indices);
 
           std::vector<Eigen::Vector2i> convex_hull_polygon;
           convex_hull_polygon.reserve (conv_border_indices.indices.size ());
