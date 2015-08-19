@@ -83,6 +83,12 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
   geometry_msgs::Point center;
   pcl::PCLPointCloud2 tmp_cloud;
 
+  visualization_msgs::Marker clear_marker;
+  clear_marker.ns= "table_holes";
+  // DELETEALL is not officially around before jade
+  clear_marker.action = 3;
+  vis_pub.publish (clear_marker);
+
   float r,g,b;
   float h = 0.0f;
   float color_increment = 360.f
@@ -96,12 +102,9 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
     pcl::fromPCLPointCloud2 (tmp_cloud, *hull_cloud);
 
     // set up header etc. for marker
-    ss.str ("");
-    ss << "convex_hull_hole" << std::setw (3) << std::setfill ('0')
-      << i;
     // TODO: automatically assign markers with rainbow colors
     visualization_msgs::Marker tmp_marker (marker);
-    tmp_marker.ns = ss.str ();
+    tmp_marker.ns = "table_holes";
     tmp_marker.id = i;
     tmp_marker.header = holes->convex_hulls[i].header;
     hsv2rgb (h, r, g, b);
@@ -154,7 +157,7 @@ main (int argc, char **argv)
   ros::init (argc, argv, "hole_visualizer");
   ros::NodeHandle n_handle;
 
-  vis_pub = n_handle.advertise<visualization_msgs::Marker> ("hole_visualization", 0);
+  vis_pub = n_handle.advertise<visualization_msgs::Marker> ("/hole_visualization", 10);
 
   // setup generic marker field
   marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
