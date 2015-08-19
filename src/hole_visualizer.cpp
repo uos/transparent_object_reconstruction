@@ -178,7 +178,7 @@ main (int argc, char **argv)
   marker.color.g = 0.0;
   marker.color.b = 0.0;
 
-  ros::Subscriber sub = n_handle.subscribe ("/hole_convex_hulls", 1, hole_hull_cb);
+  ros::Subscriber sub = n_handle.subscribe ("/table_holes", 1, hole_hull_cb);
 
   ros::spin (); 
 
