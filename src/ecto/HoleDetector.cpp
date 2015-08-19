@@ -601,7 +601,7 @@ struct HoleDetector
           std::vector<int>::const_iterator hull_it = conv_border_indices.indices.begin ();
           while (hull_it != conv_border_indices.indices.end ())
           {
-            convex_hull_polygon.push_back (inside_borders[i][*hull_it++]);
+            convex_hull_polygon.push_back (overlap_borders[i][*hull_it++]);
           }
           // store indices of points that are inside the convex hull - these will be removed later
           addRemoveIndices (input, convex_hull_polygon, remove_indices);
