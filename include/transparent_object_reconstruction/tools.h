@@ -933,48 +933,9 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
     float sample_dist = 0.005f,
     Eigen::Vector3f origin = Eigen::Vector3f::Zero ());
 
-/**
- * @brief Function to project a point into a given plane via a raytracing approach.
- * For the projection a ray between the given input point and the origin (at
- * (0,0,0) is created and checked for intersection with the plane, specified
- * by the ModelCoefficientsPtr argument. If such an intersection exists it is
- * returned via output argument 'projected_point' and the function returns true.
- *
- * @param[in] input The point that will be projected into the plane
- * @param[out] projected_point The point projected into the plane, if it exists
- * @param[in] plane The model coefficients describing the plane
- * @returns true if an intersection of the created ray and the plane exists;
- * false otherwise
- */
-bool
-projectPointOnPlane (const PointType &input, PointType &projected_point, const Eigen::Vector4f &plane);
-
-bool
-projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const Eigen::Vector4f &plane);
-
 template <class T, class U> T convert(const U&);
 
 template <class T, class U> void insert_coords (const T&, U&);
-
-/**
- * Templated function to compute the intersection between a line and a plane.
- * This function is very similar to the 5 argument function with the
- * same name. However the first point on the line is in this case fixed
- * to be the origin (0,0,0), so that only on other point on the line
- * needs to be specified. If an intersection exists, this is returned via
- * the output argument and the function returns true. Otherwise it will
- * return false and the intersection will be set to 'original_point'.
- *
- * @param[in] original_point Point on the line
- * @param[in] plane The coefficients for the plane
- * @param[out] intersection_point Intersection between line and plane if
- *   it exists.
- * @param[in] angle_eps Threshold to check for parallelity
- * @return true if the line intersects the plane; false otherwise
- **/
-
-template <class T> bool lineWithPlaneIntersection (const T &original_point, const Eigen::Vector4f &plane,
-    T &intersection_point, double angle_eps);
 
 /**
  * @brief: Templated function to compute the perspective projection of a point
@@ -985,9 +946,8 @@ template <class T> bool lineWithPlaneIntersection (const T &original_point, cons
  * output argument. Otherwise the function will return false.
  * Note that the output argument  will retain all point attributes of the input
  * point, apart from its position, if the point cloud be projected into the plane.
- * If the point could not be projected into the plane, the output argument is not
- * modified, i.e., it still contains the attribute values it contained before the
- * function call.
+ * If no projection exists and the function returns false, the output argument is
+ * undefined.
  * @param[in] point The point that is to be projected
  * @param[out] projected_point The projected point, if it exists, otherwise a
  *  copy of 'point'
@@ -996,9 +956,8 @@ template <class T> bool lineWithPlaneIntersection (const T &original_point, cons
  *  and 'point' is parallel to the given plane
  * @returns true if the point could be projected onto the plane, false otherwise
  */
-//TODO: clean up old projection code and rename this function later...
 template <typename PointT> inline bool
-projectPointOnPlane2 (const PointT &point, PointT &projected_point, const Eigen::Vector4f &plane,
+projectPointOnPlane (const PointT &point, PointT &projected_point, const Eigen::Vector4f &plane,
     double angle_eps = LINE_PLANE_ANGLE_EPS)
 {
   // copy point attributes into output
@@ -1007,14 +966,12 @@ projectPointOnPlane2 (const PointT &point, PointT &projected_point, const Eigen:
   Eigen::Vector4f result_point;
   // check if the line defined by 'point' and the origin intersects the plane
   bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
-  // copy location of intersection, if it exists
-  if (result)
-  {
-    projected_point = point;
-    projected_point.x = result_point[0];
-    projected_point.y = result_point[1];
-    projected_point.z = result_point[2];
-  }
+  // copy original point attributes
+  projected_point = point;
+  // overwrite location
+  projected_point.x = result_point[0];
+  projected_point.y = result_point[1];
+  projected_point.z = result_point[2];
   return result;
 }
 

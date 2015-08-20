@@ -145,40 +145,6 @@ insert_coords<Eigen::Vector4f, LabelPoint> (const Eigen::Vector4f &source, Label
   target.z = source[2];
 }
 
-template<>
-bool
-lineWithPlaneIntersection<PointType> (const PointType &original_point, const Eigen::Vector4f &plane,
-    PointType &intersection_point, double angle_eps)
-{
-  Eigen::Vector3f origin = Eigen::Vector3f::Zero ();
-  Eigen::Vector3f query_point = convert<Eigen::Vector3f, PointType> (original_point);
-  Eigen::Vector4f result_point;
-  bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
-  intersection_point = original_point;
-  if (result)
-  {
-    insert_coords (result_point, intersection_point);
-  }
-  return result;
-}
-
-template<>
-bool
-lineWithPlaneIntersection<LabelPoint> (const LabelPoint &original_point, const Eigen::Vector4f &plane,
-    LabelPoint &intersection_point, double angle_eps)
-{
-  Eigen::Vector3f origin = Eigen::Vector3f::Zero ();
-  Eigen::Vector3f query_point = convert<Eigen::Vector3f, LabelPoint> (original_point);
-  Eigen::Vector4f result_point;
-  bool result = lineWithPlaneIntersection (origin, query_point, plane, result_point, angle_eps);
-  intersection_point = original_point;
-  if (result)
-  {
-    insert_coords (result_point, intersection_point);
-  }
-  return result;
-}
-
 void
 extractVoxelGridCellPoints (const CloudPtr &cloud,
     pcl::VoxelGrid<PointType> &v_grid,
@@ -912,8 +878,10 @@ projectCloudOnPlane (Cloud::ConstPtr input, CloudPtr projected_cloud, ModelPtr p
   // iterate over input cloud
   for (size_t i = 0; i < input->points.size (); ++i)
   {
-    if (lineWithPlaneIntersection (input->points[i], plane_coeff, intersection, LINE_PLANE_ANGLE_EPS))
+    if (projectPointOnPlane (input->points[i], intersection, plane_coeff))
+    {
       projected_cloud->points.push_back (intersection);
+    }
   }
 
   // adapt width and height of the projected cloud
@@ -2036,26 +2004,3 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
   }
 }
 
-bool
-projectPointOnPlane (const PointType &input, PointType &projected_point, const Eigen::Vector4f &plane)
-{
-  return lineWithPlaneIntersection (input, plane, projected_point, LINE_PLANE_ANGLE_EPS);
-}
-
-bool
-projectPointOnPlane (const LabelPoint &input, LabelPoint &projected_point, const Eigen::Vector4f &plane)
-{
-  PointType tmp_i, tmp_p;
-  tmp_i.x = input.x;
-  tmp_i.y = input.y;
-  tmp_i.z = input.z;
-  projected_point = input;
-  if (projectPointOnPlane (tmp_i, tmp_p, plane))
-  {
-    projected_point.x = tmp_p.x;
-    projected_point.y = tmp_p.y;
-    projected_point.z = tmp_p.z;
-    return true;
-  }
-  return false;
-}

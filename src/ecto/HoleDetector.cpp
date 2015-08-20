@@ -568,7 +568,7 @@ struct HoleDetector
           if (::pcl::pointToPlaneDistance (border_p, plane_coefficients) > *plane_dist_threshold_ * 2.0f)
           {
             // compute perspective projection of border point onto plane
-            if (projectPointOnPlane2<PointT> (border_p, projection, plane_coefficients))
+            if (projectPointOnPlane<PointT> (border_p, projection, plane_coefficients))
             {
               // if a projection exists, add it to the border cloud
               border_cloud->points.push_back (projection);
