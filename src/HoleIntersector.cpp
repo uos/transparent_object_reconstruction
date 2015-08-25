@@ -49,12 +49,10 @@ class HoleIntersector
     {
       setUpVisMarkers ();
 
-      vis_pub_ = nhandle_.advertise<visualization_msgs::Marker>( "intersec_visualization", 0 );
+      vis_pub_ = nhandle_.advertise<visualization_msgs::Marker>( "intersec_visualization", 10, true);
 
-      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transparent_object_intersection", 0);
-      frusta_pub_ = nhandle_.advertise<LabelCloud> ("combined_frusta", 0);
-
-      test_pub_ = nhandle_.advertise<LabelCloud> ("test_cloud", 0);
+      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transparent_object_intersection", 10, true);
+      frusta_pub_ = nhandle_.advertise<LabelCloud> ("combined_frusta", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("collector_reset", &HoleIntersector::reset, this); 
 
@@ -256,10 +254,6 @@ class HoleIntersector
           LabelCloudPtr transformed_frustum (new LabelCloud);
           pcl::transformPointCloud (*frustum, *transformed_frustum, eigen_transform);
 
-          ROS_DEBUG ("transformed frustum into tabletop_frame");
-
-          test_pub_.publish (*transformed_frustum);
-
           // add frustum to collection of all frusta
           all_frusta_->points.reserve (all_frusta_->points.size () +
               transformed_frustum->points.size ());
@@ -370,6 +364,9 @@ class HoleIntersector
       {
         this->publish_intersec ();
       }
+
+      this->publish_frusta ();
+      this->publish_markers ();
     };
 
     void publish_intersec (void)
@@ -488,7 +485,6 @@ class HoleIntersector
     ros::Publisher vis_pub_;
     ros::Publisher intersec_pub_;
     ros::Publisher frusta_pub_;
-    ros::Publisher test_pub_;
 
     ros::ServiceServer reset_service_;
 
@@ -569,20 +565,8 @@ int main (int argc, char **argv)
   ros::init (argc, argv, "HoleIntersector");
 
   HoleIntersector h (0.005f, 1, "/tracked_table");
-  
-  ros::Rate rate(1.0);
 
-  while (ros::ok ())
-  {
-    ros::spinOnce ();
-    
-    h.publish_markers ();
-    // TODO: publish frusta just for testing, remove later
-    h.publish_frusta ();
-
-    rate.sleep ();
-  }
-
+  ros::spin ();
 
   return 0;
 }
