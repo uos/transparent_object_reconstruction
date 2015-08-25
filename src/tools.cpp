@@ -1184,6 +1184,9 @@ createHullLines (CloudPtr hull, CloudPtr hull_lines, float step_length = 0.005f)
     }
     hull_lines->push_back (hull->points[0]);
   }
+  // adapt cloud dimensions
+  hull_lines->width = hull_lines->points.size ();
+  hull_lines->height = 1;
 }
 
 void
@@ -2002,5 +2005,8 @@ createSampleRays (const LabelCloud::ConstPtr &base_cloud, LabelCloudPtr &ray_clo
     }
     p_it++;
   }
+  // adapt dimensions of point cloud
+  ray_cloud->width = ray_cloud->points.size ();
+  ray_cloud->height = 1;
 }
 

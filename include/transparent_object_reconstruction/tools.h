@@ -872,7 +872,7 @@ removeOverlapBetweenConcaveHulls (std::vector<CloudVector> &projected_clusters,
  * Convenience method to color all points of a given point cloud in a
  * specified color.
  *
- * @param[in.out] cloud The point cloud whose points will be colored
+ * @param[in,out] cloud The point cloud whose points will be colored
  *    uniformly in (r,g,b)
  * @param[in] r Red color channel of the new point color
  * @param[in] g Green color channel of the new point color
@@ -885,7 +885,7 @@ colorPointCloud (CloudPtr cloud, uint8_t r, uint8_t g, uint8_t b);
  * Convenience method to color all points of a given vector of point
  * clouds in a specified color.
  *
- * @param[in.out] cloud The vector of point clouds whose points will be
+ * @param[in,out] cloud The vector of point clouds whose points will be
  *    colored uniformly in (r,g,b)
  * @param[in] r Red color channel of the new point color
  * @param[in] g Green color channel of the new point color
