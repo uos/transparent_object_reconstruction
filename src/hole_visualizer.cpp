@@ -13,6 +13,7 @@
 
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/Holes.h>
+#include <transparent_object_reconstruction/tools.h>
 
 ros::Publisher vis_pub;
 ros::Publisher all_holes_vis_pub;
@@ -22,62 +23,6 @@ visualization_msgs::MarkerArray all_holes_marker;
 
 std::vector<size_t> msgs_change_indices;
 
-// we assume saturation and value to be 1.0f, since we want bright distinguishable colors :)
-void
-hsv2rgb (float h, float &r, float &g, float &b)
-{
-  float h_ = h / 60.0f;
-  float x, c;
-  c = 1.0f;
-  x = c * (1.0f - fabs (fmod (h_, 2) - 1));
-
-  if (h_ < .0f)
-  {
-    ROS_WARN ("hsv2rgb: angle must be positive, provided angle: %f",  h);
-    r = g = b = 1.0f;
-  }
-  else if (0.0f <= h_ && h_ < 1.0f)
-  {
-    r = c;
-    g = x;
-    b = 0.0f;
-  }
-  else if (1.0f <= h_ && h_ < 2.0f)
-  {
-    r = x;
-    g = c;
-    b = 0.0f;
-  }
-  else if (2.0f <= h_ && h_ < 3.0f)
-  {
-    r = 0.0f;
-    g = c;
-    b = x;
-  }
-  else if (3.0f <= h_ && h_ < 4.0f)
-  {
-    r = 0.0f;
-    g = x;
-    b = c;
-  }
-  else if (4.0f <= h_ && h_ < 5.0f)
-  {
-    r = x;
-    g = 0.0f;
-    b = c;
-  }
-  else if (5.0f <= h_ && h_ < 6.0f)
-  {
-    r = c;
-    g = 0.0f;
-    b = x;
-  }
-  else
-  {
-    ROS_WARN ("Angle must be less than 360°, provided angle: %f", h);
-    r = g = b = 1.0f;
-  }
-}
 
 void
 hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)

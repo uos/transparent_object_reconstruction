@@ -1,6 +1,8 @@
 #ifndef TRANSP_OBJ_RECON_TOOLS
 #define TRANSP_OBJ_RECON_TOOLS
 
+#include <ros/ros.h>
+
 #include <pcl/point_types.h>
 #include <pcl/ModelCoefficients.h>
 
@@ -974,5 +976,17 @@ projectPointOnPlane (const PointT &point, PointT &projected_point, const Eigen::
   projected_point.z = result_point[2];
   return result;
 }
+
+/**
+* @brief: Method to convert a HSV color value to a RGB triple.
+* It is assumed that saturation and value are both 1.0f, so only bright
+* and full colors will be returned.
+* @param[in] h The hue angle in degrees
+* @param[out] r The red value as a float in [0.0, 1.0]
+* @param[out] g The green value as a float in [0.0, 1.0]
+* @param[out] b The blue value as a float in [0.0, 1.0]
+*/
+void
+hsv2rgb (float h, float &r, float &g, float &b);
 
 #endif // TRANSP_OBJ_RECON_TOOLS

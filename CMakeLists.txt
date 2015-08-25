@@ -83,7 +83,7 @@ target_link_libraries(combine_clouds_client ${catkin_LIBRARIES})
 add_dependencies(combine_clouds_client transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(hole_visualizer src/hole_visualizer.cpp)
-target_link_libraries(hole_visualizer ${catkin_LIBRARIES})
+target_link_libraries(hole_visualizer ${catkin_LIBRARIES} tools)
 add_dependencies(hole_visualizer transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(pose2quatTrans src/pose2quatTrans.cpp)
