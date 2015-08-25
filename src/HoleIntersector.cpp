@@ -58,7 +58,7 @@ class HoleIntersector
 
       reset_service_ = nhandle_.advertiseService ("collector_reset", &HoleIntersector::reset, this); 
 
-      hole_sub_ = nhandle_.subscribe ("/hole_convex_hulls", 1, &HoleIntersector::add_holes_cb, this);
+      hole_sub_ = nhandle_.subscribe ("/table_holes", 1, &HoleIntersector::add_holes_cb, this);
 
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
@@ -76,13 +76,27 @@ class HoleIntersector
         return;
       }
 
-      // check if the retrieved message is from a new frame (assume that for each frame only 1 message is published)
-      // TODO: change this for real code to use stamp instead of frame_id for comparison
-      // real data will come in the same frame with different timestamps!
+      // check for backloop
+      //TODO: refine this hack later
+      if (collected_views_.size () > 0 &&
+          (holes->convex_hulls.front ().header.stamp - collected_views_.back ().stamp) < ros::Duration (-1.0))
+      {
+        ROS_INFO ("detected backloop");
+        transparent_object_reconstruction::HoleIntersectorReset::Request req;
+        transparent_object_reconstruction::HoleIntersectorReset::Response res;
+        this->reset (req, res);
+      }
+
+      // since curious table explorer publishes every table view exactly once, we can omit check
+      /*
+      // compare the timestamps of the headers - if the timestamps are less than 1 second apart, we assume same frame
       std::vector<std_msgs::Header>::const_iterator view_it = collected_views_.begin ();
       while (view_it != collected_views_.end ())
       {
-        if (view_it->frame_id.compare (holes->convex_hulls.front ().header.frame_id) == 0)
+        ros::Duration d = holes->convex_hulls.front ().header.stamp - view_it->stamp;
+        ros::Duration pos_sec (1.0);
+        ros::Duration neg_sec (-1.0);
+        if (d >= neg_sec && d <= pos_sec)
         {
           ROS_WARN ("Holes msg for frame '%s' already collected. Ignoring new message.",
               holes->convex_hulls.front ().header.frame_id.c_str ());
@@ -90,6 +104,7 @@ class HoleIntersector
         }
         view_it++;
       }
+      */
       // since the view was not present so far, add it to the collection
       collected_views_.push_back (holes->convex_hulls.front ().header);
       
@@ -113,7 +128,7 @@ class HoleIntersector
 
       try
       {
-        // retrieve transformaton
+        // retrieve transformation
         tflistener_.lookupTransform (tabletop_frame_,
             holes->convex_hulls[0].header.frame_id,
             holes->convex_hulls[0].header.stamp,
@@ -136,7 +151,7 @@ class HoleIntersector
       // Transform the origin of the frame where the holes were recorded
       Eigen::Vector3d transformed_origin;
       pcl::transformPoint (Eigen::Vector3d::Zero (), transformed_origin, eigen_transform);
-;
+
       std::vector<LabelCloudPtr> current_holes;
       current_holes.reserve (holes->convex_hulls.size ());
 
@@ -250,6 +265,9 @@ class HoleIntersector
               transformed_frustum->points.size ());
           all_frusta_->points.insert (all_frusta_->points.end (),
               transformed_frustum->points.begin (), transformed_frustum->points.end ());
+          // adapt dimensions of point cloud
+          all_frusta_->width = all_frusta_->points.size ();
+          all_frusta_->height = 1;
           ROS_DEBUG ("inserted frustum points into all_frusta_");
         }
       }
@@ -264,17 +282,17 @@ class HoleIntersector
 
     void computeIntersection (void)
     {
+      intersec_cloud_->points.clear ();
       if (available_labels_.size () <= 1)
       {
         ROS_DEBUG ("computing intersection with at most one label");
-        intersec_cloud_->points.clear ();
         intersec_cloud_->points.insert (intersec_cloud_->points.begin (),
             all_frusta_->points.begin (), all_frusta_->points.end ());
         this->publish_intersec ();
+        // TODO: the visualization marker should be published as well!
         return;
       }
       // clear old content from octree and intersection cloud
-      intersec_cloud_->points.clear ();
       octree_->deleteTree ();
       octree_->setInputCloud (all_frusta_);
       octree_->addPointsFromInputCloud ();
