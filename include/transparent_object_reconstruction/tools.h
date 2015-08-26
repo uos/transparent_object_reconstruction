@@ -2,6 +2,8 @@
 #define TRANSP_OBJ_RECON_TOOLS
 
 #include <ros/ros.h>
+#include <visualization_msgs/Marker.h>
+#include <geometry_msgs/Point.h>
 
 #include <pcl/point_types.h>
 #include <pcl/ModelCoefficients.h>
@@ -988,5 +990,127 @@ projectPointOnPlane (const PointT &point, PointT &projected_point, const Eigen::
 */
 void
 hsv2rgb (float h, float &r, float &g, float &b);
+
+
+/* @brief: Template method to create a triangulated mesh of a given 2D convex hull.
+ * The method expects the convex hull in terms of a point cloud and will return
+ * a ros visualization_msgs::Marker containing a triangle list that describes
+ * area enclodes by the convex hull. The points in the convex hull need to be in
+ * order for a proper tesselation.
+ *
+ * @param[in] hull_cloud The convex hull as a point cloud.
+ * @param[out] marker A visualization_msgs::Marker describing the enclosed area
+ *  as a triangle list
+ */
+template <typename PointT> inline bool
+tesselateConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
+    visualization_msgs::Marker &marker)
+{
+  if (hull_cloud->points.size () < 3)
+  {
+    ROS_WARN ("Retrieved 'convex hull' consisting of only %lu points, ignoring",
+        hull_cloud->points.size ());
+    return false;
+  }
+
+  marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+  marker.points.clear ();
+  marker.points.reserve ((hull_cloud->points.size () - 2) * 3);
+  geometry_msgs::Point fixed_point, tp1, tp2;
+
+  // pick first point of convex hull polygon to belong to each tesselation triangle
+  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it = hull_cloud->points.begin ();
+  fixed_point.x = p_it->x;
+  fixed_point.y = p_it->y;
+  fixed_point.z = p_it->z;
+  p_it++;
+  tp1.x = p_it->x;
+  tp1.y = p_it->y;
+  tp1.z = p_it->z;
+  p_it++;
+  while (p_it != hull_cloud->points.end ())
+  {
+    tp2.x = p_it->x;
+    tp2.y = p_it->y;
+    tp2.z = p_it->z;
+
+    marker.points.push_back (fixed_point);
+    marker.points.push_back (tp1);
+    marker.points.push_back (tp2);
+    tp1 = tp2;
+    p_it++;
+  }
+  return true;
+}
+
+/* @brief: Template method to create a triangulated mesh of the occlusion frustum for
+ * a given convex hull.
+ * The method expects the convex hull in terms of a point cloud and will return
+ * a ros visualization_msgs::Marker containing a triangle list that describes
+ * area enclodes by the convex hull. The final argument provides the origin, i.e.,
+ * the resultant triangle list will consist of triangles formed by the line segments
+ * of the convex hull as baselines and the origin at the top. If no origin is
+ * provided (0,0,0) will be assumed as origin.
+ *
+ * @param[in] hull_cloud The convex hull as a point cloud.
+ * @param[out] marker A visualization_msgs::Marker describing the enclosed area
+ *  as a triangle list
+ * @param[in,optional] origin The original viewpoint
+ */
+template <typename PointT> inline bool
+tesselateConeOfHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
+    visualization_msgs::Marker &marker, geometry_msgs::Point *origin = NULL)
+{
+  if (hull_cloud->points.size () < 2)
+  {
+    ROS_WARN ("Retrieved 'convex hull' consisting of only %lu points, ignoring",
+        hull_cloud->points.size ());
+    return false;
+  }
+
+  marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+  marker.points.clear ();
+  marker.points.reserve ((hull_cloud->points.size ()) * 3);
+  geometry_msgs::Point fixed_point, tp1, tp2;
+
+  // pick the origin (= viewpoint) as fixed point
+  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it = hull_cloud->points.begin ();
+  if (origin == NULL)
+  {
+    fixed_point.x = 0.0f;
+    fixed_point.y = 0.0f;
+    fixed_point.z = 0.0f;
+  }
+  else
+  {
+    fixed_point.x = origin->x;
+    fixed_point.y = origin->y;
+    fixed_point.z = origin->z;
+  }
+  tp1.x = p_it->x;
+  tp1.y = p_it->y;
+  tp1.z = p_it->z;
+  p_it++;
+  while (p_it != hull_cloud->points.end ())
+  {
+    tp2.x = p_it->x;
+    tp2.y = p_it->y;
+    tp2.z = p_it->z;
+
+    marker.points.push_back (fixed_point);
+    marker.points.push_back (tp1);
+    marker.points.push_back (tp2);
+    tp1 = tp2;
+    p_it++;
+  }
+  marker.points.push_back (fixed_point);
+  marker.points.push_back (tp1);
+  tp2.x = hull_cloud->points.front ().x;
+  tp2.y = hull_cloud->points.front ().y;
+  tp2.z = hull_cloud->points.front ().z;
+  marker.points.push_back (tp2);
+
+  return true;
+}
 
 #endif // TRANSP_OBJ_RECON_TOOLS

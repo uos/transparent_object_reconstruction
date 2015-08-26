@@ -65,41 +65,10 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
     tmp_marker.color.b = b;
     h += color_increment;
 
-    tmp_marker.points.reserve ((hull_cloud->points.size () - 2) * 3);
-    geometry_msgs::Point fixed_point, tp1, tp2;
-
-    if (hull_cloud->points.size () < 3)
+    if (tesselateConvexHull<PointType> (hull_cloud, tmp_marker))
     {
-      ROS_WARN ("Retrieved 'convex hull' consisting of only %lu points, skipping",
-          hull_cloud->points.size ());
-      continue;
+      vis_pub.publish (tmp_marker);
     }
-
-    // pick first point of convex hull polygon to belong to each tesselation triangle
-    Cloud::VectorType::const_iterator p_it = hull_cloud->points.begin ();
-    size_t counter = 0;
-    fixed_point.x = p_it->x;
-    fixed_point.y = p_it->y;
-    fixed_point.z = p_it->z;
-    p_it++;
-    tp1.x = p_it->x;
-    tp1.y = p_it->y;
-    tp1.z = p_it->z;
-    p_it++;
-    while (p_it != hull_cloud->points.end ())
-    {
-      tp2.x = p_it->x;
-      tp2.y = p_it->y;
-      tp2.z = p_it->z;
-
-      tmp_marker.points.push_back (fixed_point);
-      tmp_marker.points.push_back (tp1);
-      tmp_marker.points.push_back (tp2);
-      tp1 = tp2;
-      p_it++;
-    }
-    all_holes_marker.markers.push_back (tmp_marker);
-    vis_pub.publish (tmp_marker);
   }
 
   // TODO: do we need to manually delete the old markers?
@@ -154,7 +123,6 @@ main (int argc, char **argv)
   // setup generic marker field
   marker.ns = "table_holes";
   marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
-  marker.action = visualization_msgs::Marker::ADD;
   marker.action = visualization_msgs::Marker::ADD;
   marker.pose.position.x = 0;
   marker.pose.position.y = 0;
