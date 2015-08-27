@@ -16,12 +16,8 @@
 #include <transparent_object_reconstruction/tools.h>
 
 ros::Publisher vis_pub;
-ros::Publisher all_holes_vis_pub;
 
 visualization_msgs::Marker marker;
-visualization_msgs::MarkerArray all_holes_marker;
-
-std::vector<size_t> msgs_change_indices;
 
 
 void
@@ -41,7 +37,6 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
 
   std::stringstream ss;
   geometry_msgs::Point center;
-  all_holes_marker.markers.reserve (all_holes_marker.markers.size () + holes->convex_hulls.size ());
 
   float r,g,b;
   float h = 0.0f;
@@ -70,43 +65,6 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
       vis_pub.publish (tmp_marker);
     }
   }
-
-  // TODO: do we need to manually delete the old markers?
-  // store where the current hole regions end in marker array
-  msgs_change_indices.push_back (all_holes_marker.markers.size ());
-  // do recoloring of markers, so that the markers of each frame are colored in the same color
-  h = 0.0f;
-  color_increment = 360.f / static_cast<float>(msgs_change_indices.size ());
-  std::vector<float> red;
-  std::vector<float> green;
-  std::vector<float> blue;
-  red.reserve (all_holes_marker.markers.size ());
-  green.reserve (all_holes_marker.markers.size ());
-  blue.reserve (all_holes_marker.markers.size ());
-  size_t start, end;
-  start = 0;
-  for (size_t i = 0; i < msgs_change_indices.size (); ++i)
-  {
-    // determine index range of holes from the same msg
-    end = msgs_change_indices[i];
-    // create color for all holes from the same message
-    hsv2rgb (h, r, g, b);
-    h += color_increment;
-    for (size_t j = start; j < end; ++j)
-    {
-      red.push_back (r);
-      green.push_back (g);
-      blue.push_back (b);
-    }
-    start = end;
-  }
-  for (size_t i = 0; i < all_holes_marker.markers.size (); ++i)
-  {
-    all_holes_marker.markers[i].color.r = red[i];
-    all_holes_marker.markers[i].color.g = green[i];
-    all_holes_marker.markers[i].color.b = blue[i];
-  }
-  all_holes_vis_pub.publish (all_holes_marker);
 }
 
 int
@@ -116,9 +74,6 @@ main (int argc, char **argv)
   ros::NodeHandle n_handle;
 
   vis_pub = n_handle.advertise<visualization_msgs::Marker> ("/curr_hole_visualization", 10);
-
-  all_holes_vis_pub = n_handle.advertise<visualization_msgs::MarkerArray> ("/all_hole_visualization", 10);
-  msgs_change_indices.clear ();
 
   // setup generic marker field
   marker.ns = "table_holes";
