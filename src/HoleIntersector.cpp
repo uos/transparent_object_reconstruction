@@ -54,6 +54,7 @@ class HoleIntersector
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "frusta_visualization", 10, true);
 
       intersec_pub_ = nhandle_.advertise<LabelCloud> ("transparent_object_intersection", 10, true);
+      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("partial_intersection", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("collector_reset", &HoleIntersector::reset, this); 
 
@@ -62,6 +63,7 @@ class HoleIntersector
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
+      fraction_intersec_cloud = boost::make_shared<LabelCloud> ();
 
     };
 
@@ -288,7 +290,10 @@ class HoleIntersector
 
     void computeIntersection (void)
     {
+      // remove lingering contents of output clouds
       intersec_cloud_->points.clear ();
+      fraction_intersec_cloud->points.clear ();
+
       if (available_labels_.size () < 1)
       {
         ROS_WARN ("called 'computeIntersection ()', but no label exists; Exiting intersection computation");
@@ -321,6 +326,7 @@ class HoleIntersector
 
       // iterate over all leaves to check which belongs to the intersection
       intersec_cloud_->points.reserve (all_frusta_->points.size ());
+      fraction_intersec_cloud->points.reserve (all_frusta_->points.size ());
       size_t nr_leaves, filled_leaves, intersec_leaves;
       nr_leaves = filled_leaves = intersec_leaves = 0;
       Eigen::Vector3f min, max, center;
@@ -350,20 +356,31 @@ class HoleIntersector
           voxel_center.y = center[1];
           voxel_center.z = center[2];
 
-          if (isLeafInIntersection (*leaf_cloud, available_labels_))
+          size_t nr_detected_labels;
+          bool detected_fraction;
+          if (isLeafInIntersection (*leaf_cloud, available_labels_, nr_detected_labels))
           {
             intersec_marker_.points.push_back (voxel_center);
-
             intersec_leaves++;
             p_it = leaf_cloud->points.begin ();
             while (p_it != leaf_cloud->points.end ())
             {
+              fraction_intersec_cloud->points.push_back (*p_it);
               intersec_cloud_->points.push_back (*p_it++);
             }
           }
           else
           {
             non_intersec_marker_.points.push_back (voxel_center);
+            // TODO: change fraction, 0.5 is just for testing
+            if (static_cast<float> (nr_detected_labels) / static_cast<float> (available_labels_.size ()) > .75f)
+            {
+              p_it = leaf_cloud->points.begin ();
+              while (p_it != leaf_cloud->points.end ())
+              {
+                fraction_intersec_cloud->points.push_back (*p_it++);
+              }
+            }
           }
         }
         leaf_it++;
@@ -371,6 +388,10 @@ class HoleIntersector
       if (intersec_cloud_->points.size () > 0)
       {
         this->publish_intersec ();
+      }
+      if (fraction_intersec_cloud->points.size () > 0)
+      {
+        this->publish_partial_intersec ();
       }
 
       this->publish_markers ();
@@ -394,6 +415,27 @@ class HoleIntersector
         intersec_pub_.publish (intersec_cloud_);
 
         // TODO: publish also as mesh or something similar
+      }
+    };
+
+    void publish_partial_intersec (void)
+    {
+      if (fraction_intersec_cloud != NULL)
+      {
+        // create Header with appropriate frame and time stamp
+        std_msgs::Header header;
+        header.frame_id = tabletop_frame_;
+        header.stamp = ros::Time::now ();
+        pcl_conversions::toPCL (header, fraction_intersec_cloud->header);
+
+        // set width and height of cloud
+        fraction_intersec_cloud->height = 1;
+        fraction_intersec_cloud->width = fraction_intersec_cloud->points.size ();
+
+        // publish
+        partial_intersec_pub_.publish (fraction_intersec_cloud);
+
+
       }
     };
 
@@ -527,6 +569,7 @@ class HoleIntersector
     
     ros::Publisher vis_pub_;
     ros::Publisher intersec_pub_;
+    ros::Publisher partial_intersec_pub_;
     ros::Publisher all_frusta_pub_;
 
     ros::ServiceServer reset_service_;
@@ -534,8 +577,11 @@ class HoleIntersector
     tf::TransformListener tflistener_;
     std::vector<std::vector<LabelCloudPtr> > transformed_holes_;
     std::vector<Eigen::Affine3d> transforms_;
+
     LabelCloudPtr all_frusta_;
     LabelCloudPtr intersec_cloud_;
+    LabelCloudPtr fraction_intersec_cloud;
+
     std::set<uint32_t> available_labels_;
     std::vector<std_msgs::Header> collected_views_;
     std::vector<size_t> frame_change_indices;
@@ -559,7 +605,7 @@ class HoleIntersector
     };
     
     static bool isLeafInIntersection (const LabelCloud &leaf_cloud,
-        const std::set<uint32_t> &labels)
+        const std::set<uint32_t> &labels, size_t &nr_detected_labels)
     {
       std::map<uint32_t, size_t> leaf_labels;
       std::map<uint32_t, size_t>::iterator detected_label;
@@ -589,14 +635,17 @@ class HoleIntersector
 
       bool missing_label = false;
       size_t min_points_per_label = 1; // TODO: change this value dynammically dependent on total number of points in leaf?
-
+      nr_detected_labels = 0;
       detected_label = leaf_labels.begin ();
       while (detected_label != leaf_labels.end ())
       {
         if (detected_label->second < min_points_per_label)
         {
           missing_label = true;
-          return false;
+        }
+        else
+        {
+          nr_detected_labels++;
         }
         detected_label++;
       }
