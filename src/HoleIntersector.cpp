@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
 
 #include <tf/transform_listener.h>
@@ -50,9 +51,9 @@ class HoleIntersector
       setUpVisMarkers ();
 
       vis_pub_ = nhandle_.advertise<visualization_msgs::Marker>( "intersec_visualization", 10, true);
+      all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "frusta_visualization", 10, true);
 
       intersec_pub_ = nhandle_.advertise<LabelCloud> ("transparent_object_intersection", 10, true);
-      frusta_pub_ = nhandle_.advertise<LabelCloud> ("combined_frusta", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("collector_reset", &HoleIntersector::reset, this); 
 
@@ -173,6 +174,16 @@ class HoleIntersector
 
         ROS_DEBUG ("successfully transformed pointcloud, Yay!");
 
+        geometry_msgs::Point tmp_point;
+        tmp_point.x = transformed_origin[0];
+        tmp_point.y = transformed_origin[1];
+        tmp_point.z = transformed_origin[2];
+        if (tesselateConeOfHull<LabelPoint> (xy_hole_hull, basic_frustum_marker_, &tmp_point))
+        {
+          basic_frustum_marker_.id = i;
+          frusta_marker_.markers.push_back (basic_frustum_marker_);
+        }
+
         // create grid for sampling
         pcl::VoxelGrid<LabelPoint> grid;
         grid.setSaveLeafLayout (true);
@@ -200,7 +211,7 @@ class HoleIntersector
           h_it++;
         }
 
-        ROS_DEBUG ("retrieved grid coords");
+        ROS_DEBUG ("retrieved grid coords, nr_grid cells: %lu", hull_polygon.size ());
 
         // get lower and upper corners of VoxelGrid
         bbox_min = grid.getMinBoxCoordinates ();
@@ -228,7 +239,8 @@ class HoleIntersector
           }
         }
 
-        ROS_DEBUG ("created hole sample in x_y_plane, size: %lu", xy_hole_sample_cloud->points.size ());
+        ROS_DEBUG ("created hole sample in x_y_plane, size: %lu, dims: %ix%i",
+            xy_hole_sample_cloud->points.size (), bbox_max[0] - bbox_min[0], bbox_max[1] - bbox_min[1]);
         
         // store the convex hull in the tabletop frame (with point labels)
         current_holes.push_back (xy_hole_sample_cloud);
@@ -271,19 +283,15 @@ class HoleIntersector
       // compute intersection
       this->computeIntersection ();
 
-      ROS_DEBUG ("Finished callback");
+      ROS_DEBUG ("Finished callback, intersections and visualization for %lu views are computed", collected_views_.size ());
     };
 
     void computeIntersection (void)
     {
       intersec_cloud_->points.clear ();
-      if (available_labels_.size () <= 1)
+      if (available_labels_.size () < 1)
       {
-        ROS_DEBUG ("computing intersection with at most one label");
-        intersec_cloud_->points.insert (intersec_cloud_->points.begin (),
-            all_frusta_->points.begin (), all_frusta_->points.end ());
-        this->publish_intersec ();
-        // TODO: the visualization marker should be published as well!
+        ROS_WARN ("called 'computeIntersection ()', but no label exists; Exiting intersection computation");
         return;
       }
       // clear old content from octree and intersection cloud
@@ -365,7 +373,6 @@ class HoleIntersector
         this->publish_intersec ();
       }
 
-      this->publish_frusta ();
       this->publish_markers ();
     };
 
@@ -389,25 +396,6 @@ class HoleIntersector
         // TODO: publish also as mesh or something similar
       }
     };
-    
-    void publish_frusta (void)
-    {
-      if (all_frusta_ != NULL)
-      {
-        // create Header with appropriate frame and time stamp
-        std_msgs::Header header;
-        header.frame_id = tabletop_frame_;
-        header.stamp = ros::Time::now ();
-        pcl_conversions::toPCL (header, all_frusta_->header);
-
-        // set width and height of cloud
-        all_frusta_->height = 1;
-        all_frusta_->width = all_frusta_->points.size ();
-
-        // publish
-        frusta_pub_.publish (all_frusta_);
-      }
-    };
 
     void publish_markers (void)
     {
@@ -418,6 +406,37 @@ class HoleIntersector
       // publish visualization marker
       vis_pub_.publish (intersec_marker_);
       vis_pub_.publish (non_intersec_marker_);
+
+      // recolor and publish Marker array for occlusion frusta
+      frame_change_indices.push_back (frusta_marker_.markers.size ());
+      float h, r, g, b, color_increment;
+      color_increment = 360.0f / static_cast<float> (frame_change_indices.size ());
+      h = 0.0f;
+      size_t start_index, end_index;
+      start_index = 0;
+      std::stringstream ss;
+      ROS_DEBUG ("frusta_marker_.markers.size (): %lu", frusta_marker_.markers.size ());
+      for (size_t i = 0; i < frame_change_indices.size (); ++ i)
+      {
+        end_index = frame_change_indices[i];
+        hsv2rgb (h, r, g, b);
+        ss << "frame_" << i;
+        ROS_DEBUG ("start_index: %lu, end_index: %lu", start_index, end_index);
+        for (size_t j = start_index; j < end_index; ++j)
+        {
+          frusta_marker_.markers[j].ns = ss.str ();
+          frusta_marker_.markers[j].color.r = r;
+          frusta_marker_.markers[j].color.g = g;
+          frusta_marker_.markers[j].color.b = b;
+          frusta_marker_.markers[j].header.stamp = ros::Time::now ();
+        }
+        ss.str ("");
+        h += color_increment;
+        start_index = end_index;
+      }
+      all_frusta_pub_.publish (frusta_marker_);
+
+      ROS_INFO ("published markers, currently %lu views collected", collected_views_.size ());
     };
 
     bool reset (transparent_object_reconstruction::HoleIntersectorReset::Request &req,
@@ -438,6 +457,11 @@ class HoleIntersector
       // ...reset the markers...
       intersec_marker_.points.clear ();
       non_intersec_marker_.points.clear ();
+      // ...reset and clear marker array...
+      clear_marker_array_.markers.front ().header.stamp = ros::Time::now ();
+      all_frusta_pub_.publish (clear_marker_array_);
+      frusta_marker_.markers.clear ();
+      frame_change_indices.clear ();
       // ...and exit
       ROS_INFO ("Reset HoleIntersector");
       return true;
@@ -476,6 +500,25 @@ class HoleIntersector
       non_intersec_marker_.id = 1;
       non_intersec_marker_.color.r = 1.0;
       non_intersec_marker_.color.g = 0.0;
+
+      // set up basic frustum marker
+      basic_frustum_marker_ = visualization_msgs::Marker (intersec_marker_);
+      basic_frustum_marker_.header.frame_id = tabletop_frame_;
+      basic_frustum_marker_.ns = "frusta_cone";
+      basic_frustum_marker_.type = visualization_msgs::Marker::TRIANGLE_LIST;
+      basic_frustum_marker_.action = visualization_msgs::Marker::ADD;
+      basic_frustum_marker_.color.a = 0.4;
+      basic_frustum_marker_.scale.x = 1.0;
+      basic_frustum_marker_.scale.y = 1.0;
+      basic_frustum_marker_.scale.z = 1.0;
+
+      visualization_msgs::Marker clear_marker (intersec_marker_);
+      clear_marker.header.frame_id = "map";
+      // DELETEALL is not officially around before jade, addressed it by value
+      clear_marker.action = 3;
+      clear_marker_array_.markers.push_back (clear_marker);
+
+
     };
 
   protected:
@@ -484,7 +527,7 @@ class HoleIntersector
     
     ros::Publisher vis_pub_;
     ros::Publisher intersec_pub_;
-    ros::Publisher frusta_pub_;
+    ros::Publisher all_frusta_pub_;
 
     ros::ServiceServer reset_service_;
 
@@ -495,9 +538,13 @@ class HoleIntersector
     LabelCloudPtr intersec_cloud_;
     std::set<uint32_t> available_labels_;
     std::vector<std_msgs::Header> collected_views_;
+    std::vector<size_t> frame_change_indices;
 
     visualization_msgs::Marker intersec_marker_;
     visualization_msgs::Marker non_intersec_marker_;
+    visualization_msgs::Marker basic_frustum_marker_;
+    visualization_msgs::MarkerArray frusta_marker_;
+    visualization_msgs::MarkerArray clear_marker_array_;
 
     LabelOctree::Ptr octree_;
 
