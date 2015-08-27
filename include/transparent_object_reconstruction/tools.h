@@ -1113,4 +1113,24 @@ tesselateConeOfHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
   return true;
 }
 
+/**
+  * @brief Template function to return the distance of a point to a given line.
+  * The line is defined as passing through the points provided by the first two arguments
+  * while its distance to the point provided by the third argument will be returned.
+  *
+  *@param[in] line_point_a The first point on the line
+  *@param[in] line_point_b The second point on the line
+  *@param[in] query_point The query point
+  *@returns The distance from the query point to the line
+  */
+template <typename PointT> inline float
+lineToPointDistance (const PointT &line_point_a, const PointT &line_point_b, const PointT &query_point)
+{
+  Eigen::Vector3f a (line_point_a.x, line_point_a.y, line_point_a.z);
+  Eigen::Vector3f b (line_point_b.x, line_point_b.y, line_point_b.z);
+  Eigen::Vector3f c (query_point.x, query_point.y, query_point.z);
+  Eigen::ParametrizedLine<float, 3> param_line = Eigen::ParametrizedLine<float, 3>::Through (a, b);
+  return param_line.distance (c);
+}
+
 #endif // TRANSP_OBJ_RECON_TOOLS
