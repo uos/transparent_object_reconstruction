@@ -50,7 +50,7 @@ class HoleIntersector
     {
       setUpVisMarkers ();
 
-      vis_pub_ = nhandle_.advertise<visualization_msgs::Marker>( "intersec_visualization", 10, true);
+      vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "intersec_visualization", 10, true);
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "frusta_visualization", 10, true);
 
       intersec_pub_ = nhandle_.advertise<LabelCloud> ("transparent_object_intersection", 10, true);
@@ -63,7 +63,7 @@ class HoleIntersector
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
-      fraction_intersec_cloud = boost::make_shared<LabelCloud> ();
+      partial_intersec_cloud_ = boost::make_shared<LabelCloud> ();
 
     };
 
@@ -292,7 +292,7 @@ class HoleIntersector
     {
       // remove lingering contents of output clouds
       intersec_cloud_->points.clear ();
-      fraction_intersec_cloud->points.clear ();
+      partial_intersec_cloud_->points.clear ();
 
       if (available_labels_.size () < 1)
       {
@@ -326,7 +326,7 @@ class HoleIntersector
 
       // iterate over all leaves to check which belongs to the intersection
       intersec_cloud_->points.reserve (all_frusta_->points.size ());
-      fraction_intersec_cloud->points.reserve (all_frusta_->points.size ());
+      partial_intersec_cloud_->points.reserve (all_frusta_->points.size ());
       size_t nr_leaves, filled_leaves, intersec_leaves;
       nr_leaves = filled_leaves = intersec_leaves = 0;
       Eigen::Vector3f min, max, center;
@@ -365,7 +365,7 @@ class HoleIntersector
             p_it = leaf_cloud->points.begin ();
             while (p_it != leaf_cloud->points.end ())
             {
-              fraction_intersec_cloud->points.push_back (*p_it);
+              partial_intersec_cloud_->points.push_back (*p_it);
               intersec_cloud_->points.push_back (*p_it++);
             }
           }
@@ -378,7 +378,7 @@ class HoleIntersector
               p_it = leaf_cloud->points.begin ();
               while (p_it != leaf_cloud->points.end ())
               {
-                fraction_intersec_cloud->points.push_back (*p_it++);
+                partial_intersec_cloud_->points.push_back (*p_it++);
               }
             }
           }
@@ -389,7 +389,7 @@ class HoleIntersector
       {
         this->publish_intersec ();
       }
-      if (fraction_intersec_cloud->points.size () > 0)
+      if (partial_intersec_cloud_->points.size () > 0)
       {
         this->publish_partial_intersec ();
       }
@@ -420,22 +420,20 @@ class HoleIntersector
 
     void publish_partial_intersec (void)
     {
-      if (fraction_intersec_cloud != NULL)
+      if (partial_intersec_cloud_ != NULL)
       {
         // create Header with appropriate frame and time stamp
         std_msgs::Header header;
         header.frame_id = tabletop_frame_;
         header.stamp = ros::Time::now ();
-        pcl_conversions::toPCL (header, fraction_intersec_cloud->header);
+        pcl_conversions::toPCL (header, partial_intersec_cloud_->header);
 
         // set width and height of cloud
-        fraction_intersec_cloud->height = 1;
-        fraction_intersec_cloud->width = fraction_intersec_cloud->points.size ();
+        partial_intersec_cloud_->height = 1;
+        partial_intersec_cloud_->width = partial_intersec_cloud_->points.size ();
 
         // publish
-        partial_intersec_pub_.publish (fraction_intersec_cloud);
-
-
+        partial_intersec_pub_.publish (partial_intersec_cloud_);
       }
     };
 
@@ -446,8 +444,10 @@ class HoleIntersector
       non_intersec_marker_.header.stamp = ros::Time::now ();
       non_intersec_marker_.header.frame_id = tabletop_frame_;
       // publish visualization marker
-      vis_pub_.publish (intersec_marker_);
-      vis_pub_.publish (non_intersec_marker_);
+      visualization_msgs::MarkerArray vis_marker_array;
+      vis_marker_array.markers.push_back (intersec_marker_);
+      vis_marker_array.markers.push_back (non_intersec_marker_);
+      vis_pub_.publish (vis_marker_array);
 
       // recolor and publish Marker array for occlusion frusta
       frame_change_indices.push_back (frusta_marker_.markers.size ());
@@ -502,6 +502,7 @@ class HoleIntersector
       // ...reset and clear marker array...
       clear_marker_array_.markers.front ().header.stamp = ros::Time::now ();
       all_frusta_pub_.publish (clear_marker_array_);
+      vis_pub_.publish (clear_marker_array_);
       frusta_marker_.markers.clear ();
       frame_change_indices.clear ();
       // ...and exit
@@ -580,7 +581,7 @@ class HoleIntersector
 
     LabelCloudPtr all_frusta_;
     LabelCloudPtr intersec_cloud_;
-    LabelCloudPtr fraction_intersec_cloud;
+    LabelCloudPtr partial_intersec_cloud_;
 
     std::set<uint32_t> available_labels_;
     std::vector<std_msgs::Header> collected_views_;
