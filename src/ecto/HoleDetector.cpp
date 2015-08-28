@@ -299,6 +299,7 @@ struct HoleDetector
     params.declare<size_t> ("min_hole_size", "Minimal numbers of connected pixels in the depth image to form a hole", 15);
     params.declare<float> ("inside_out_factor", "Determines if a nan-region is outside of table hull (#outside > #points_inside * inside_out_factor)", 2.0f);
     params.declare<float> ("plane_dist_threshold", "Distance threshold for plane classification", .02f);
+    params.declare<float> ("min_distance_to_convex_hull", "Minimal distance to convex hull for overlapping holes", .05f);
   }
 
   static void declare_io ( const tendrils& params, tendrils& inputs, tendrils& outputs)
@@ -315,6 +316,7 @@ struct HoleDetector
     min_hole_size_ = params["min_hole_size"];
     inside_out_factor_ = params["inside_out_factor"];
     plane_dist_threshold_ = params["plane_dist_threshold"];
+    min_distance_to_convex_hull_ = params["min_distance_to_convex_hull"];
     hull_indices_ = inputs["hull_indices"];
     model_ = inputs["model"];
     output_ = outputs["output"];
@@ -387,6 +389,18 @@ struct HoleDetector
       std::vector<std::vector<Eigen::Vector2i> > all_hole_2Dcoords;
       std::vector<std::vector<Eigen::Vector2i> > all_border_2Dcoords;
       getBoundingBox2DConvexHull (input, **hull_indices_, table_min, table_max, hull_2Dcoords);
+
+      // retrieve the 3D coordinates of the convex hull of the tabletop
+
+      auto table_convex_hull = boost::make_shared<::pcl::PointCloud<PointT> > ();
+      table_convex_hull->points.reserve ((*hull_indices_)->indices.size ());
+      std::vector<int>::const_iterator hull_index_it = (*hull_indices_)->indices.begin ();
+      while (hull_index_it != (*hull_indices_)->indices.end ())
+      {
+        table_convex_hull->points.push_back (input->points[*hull_index_it++]);
+      }
+      table_convex_hull->width = table_convex_hull->points.size ();
+      table_convex_hull->height = 1;
 
       std::vector<std::vector<bool> > visited (input->width, std::vector<bool> (input->height, false));
 
@@ -534,23 +548,30 @@ struct HoleDetector
         pcl::toROSMsg (*conv_border_cloud, pc2);
         holes_msg->convex_hulls.push_back (pc2);
       }
-      // TODO: determine if we can do some refactoring here, concerning the code that is shared with the completely enclosed holes...
+
       // work on the holes that are partially inside the convex hull
       for (size_t i = 0; i < overlap_borders.size (); ++i)
       {
         unsigned int inside_points = 0;
         double dist_sum = 0.0f;
+        // create temporary cloud for all border points inside the convex hull, so that we can check for hole artifacts later
+
+        // create a marker to check which of the border points are inside the convex hull
+        std::vector<bool> point_inside (overlap_borders[i].size (), false);
+
         coord_it = overlap_borders[i].begin ();
         // check for alignment of the points that are considered in the convex hull
-        while (coord_it != overlap_borders[i].end ())
+        for (size_t j = 0; j < overlap_borders[i].size (); ++j)
         {
-          if (pointInPolygon2D (hull_2Dcoords, *coord_it))
+          if (pointInPolygon2D (hull_2Dcoords, overlap_borders[i][j]))
           {
-            dist_sum += ::pcl::pointToPlaneDistance (input->at ((*coord_it)[0], (*coord_it)[1]), plane_coefficients);
+            dist_sum += ::pcl::pointToPlaneDistance (input->at (overlap_borders[i][j][0],
+                  overlap_borders[i][j][1]), plane_coefficients);
             inside_points++;
+            point_inside[j] = true;
           }
-          coord_it++;
         }
+
         double avg_dist = dist_sum / static_cast<double> (inside_points);
         if (avg_dist > *plane_dist_threshold_ * 3.0f) // TODO: perhaps remove the points with the largest 3 distances instead?
         {
@@ -562,6 +583,11 @@ struct HoleDetector
         border_cloud->points.reserve (overlap_borders[i].size ());
         coord_it = overlap_borders[i].begin ();
         PointT border_p, projection;
+
+        auto inside_hull_border = boost::make_shared<::pcl::PointCloud<PointT> > ();
+        inside_hull_border->points.reserve (overlap_borders[i].size ());
+        std::vector<bool>::const_iterator is_inside_it = point_inside.begin ();
+
         while (coord_it != overlap_borders[i].end ())
         {
           border_p = input->at ((*coord_it)[0], (*coord_it)[1]);
@@ -579,33 +605,74 @@ struct HoleDetector
           {
             border_cloud->points.push_back (border_p);
           }
+          // store all point (raw or projected) that are inside the convex hull of the table
+          if (*is_inside_it++)
+          {
+            inside_hull_border->points.push_back (border_cloud->points.back ());
+          }
           coord_it++;
         }
+        inside_hull_border->width = inside_hull_border->points.size ();
+        inside_hull_border->height = 1;
+
         if (border_cloud->points.size () > 0)
         {
-          // set dimensions of border cloud
-          border_cloud->width = border_cloud->points.size ();
-          border_cloud->height = 1;
-
-          // project border into plane and retrieve convex hull
-          auto conv_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
-          ::pcl::PointIndices conv_border_indices;
-          projectBorderAndCreateHull (border_cloud, conv_border_cloud, conv_border_indices);
-
-          std::vector<Eigen::Vector2i> convex_hull_polygon;
-          convex_hull_polygon.reserve (conv_border_indices.indices.size ());
-          std::vector<int>::const_iterator hull_it = conv_border_indices.indices.begin ();
-          while (hull_it != conv_border_indices.indices.end ())
+          // determine if this hole is an 'artifact' near the edges of the table...
+          typename ::pcl::PointCloud<PointT>::VectorType::const_iterator p_it = inside_hull_border->points.begin ();
+          typename ::pcl::PointCloud<PointT>::VectorType::const_iterator table_hull_it;
+          float max_min_dist = -std::numeric_limits<float>::max ();
+          PointT line_point;
+          float dist_to_line;
+          // determine for each point of the hole border inside the hull the closest line of the convex hull
+          while (p_it != inside_hull_border->points.end ())
           {
-            convex_hull_polygon.push_back (overlap_borders[i][*hull_it++]);
+            float min_distance = std::numeric_limits<float>::max ();
+            line_point = table_convex_hull->points.back ();
+            table_hull_it = table_convex_hull->points.begin ();
+            while (table_hull_it != table_convex_hull->points.end ())
+            {
+              dist_to_line = lineToPointDistance<PointT> (line_point, *table_hull_it, *p_it);
+              if (dist_to_line < min_distance)
+              {
+                min_distance = dist_to_line;
+              }
+              line_point = *table_hull_it;
+              table_hull_it++;
+            }
+            if (min_distance > max_min_dist)
+            {
+              max_min_dist = min_distance;
+            }
+            p_it++;
           }
-          // store indices of points that are inside the convex hull - these will be removed later
-          addRemoveIndices (input, convex_hull_polygon, remove_indices);
 
-          // add current hole to Hole message
-          sensor_msgs::PointCloud2 pc2;
-          pcl::toROSMsg (*conv_border_cloud, pc2);
-          holes_msg->convex_hulls.push_back (pc2);
+          // the farthest point from the hole should be at least as far away as given threshold
+          if (max_min_dist > *min_distance_to_convex_hull_)
+          {
+            // set dimensions of border cloud
+            border_cloud->width = border_cloud->points.size ();
+            border_cloud->height = 1;
+
+            // project border into plane and retrieve convex hull
+            auto conv_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+            ::pcl::PointIndices conv_border_indices;
+            projectBorderAndCreateHull (border_cloud, conv_border_cloud, conv_border_indices);
+
+            std::vector<Eigen::Vector2i> convex_hull_polygon;
+            convex_hull_polygon.reserve (conv_border_indices.indices.size ());
+            std::vector<int>::const_iterator hull_it = conv_border_indices.indices.begin ();
+            while (hull_it != conv_border_indices.indices.end ())
+            {
+              convex_hull_polygon.push_back (overlap_borders[i][*hull_it++]);
+            }
+            // store indices of points that are inside the convex hull - these will be removed later
+            addRemoveIndices (input, convex_hull_polygon, remove_indices);
+
+            // add current hole to Hole message
+            sensor_msgs::PointCloud2 pc2;
+            pcl::toROSMsg (*conv_border_cloud, pc2);
+            holes_msg->convex_hulls.push_back (pc2);
+          }
         }
       }
 
@@ -652,6 +719,7 @@ struct HoleDetector
   ecto::spore<size_t> min_hole_size_;
   ecto::spore<float> inside_out_factor_;
   ecto::spore<float> plane_dist_threshold_;
+  ecto::spore<float> min_distance_to_convex_hull_;
   ecto::spore<::pcl::PointIndices::ConstPtr> hull_indices_;
   ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_; //TODO: is this what I get from the segmentation?
   ecto::spore<ecto::pcl::PointCloud> output_;
