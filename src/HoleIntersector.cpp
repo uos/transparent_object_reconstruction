@@ -285,7 +285,7 @@ class HoleIntersector
       // compute intersection
       this->computeIntersection ();
 
-      ROS_DEBUG ("Finished callback, intersections and visualization for %lu views are computed", collected_views_.size ());
+      ROS_INFO ("Finished callback, intersections and visualization for %lu views are computed", collected_views_.size ());
     };
 
     void computeIntersection (void)
@@ -478,7 +478,7 @@ class HoleIntersector
       }
       all_frusta_pub_.publish (frusta_marker_);
 
-      ROS_INFO ("published markers, currently %lu views collected", collected_views_.size ());
+      ROS_DEBUG ("published markers, currently %lu views collected", collected_views_.size ());
     };
 
     bool reset (transparent_object_reconstruction::HoleIntersectorReset::Request &req,
