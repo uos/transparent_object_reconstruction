@@ -163,7 +163,9 @@ class HoleIntersector
         LabelCloudPtr hole_hull (new LabelCloud);
         pcl::PCLPointCloud2 pcl_pc2;
         pcl_conversions::toPCL (holes->convex_hulls[i], pcl_pc2);
+        pcl::console::setVerbosityLevel (pcl::console::L_ALWAYS);
         pcl::fromPCLPointCloud2 (pcl_pc2, *hole_hull);
+        pcl::console::setVerbosityLevel (pcl::console::L_INFO);
 
         ROS_DEBUG ("finished conversion, hole hull size: %lu",
             hole_hull->points.size ());
