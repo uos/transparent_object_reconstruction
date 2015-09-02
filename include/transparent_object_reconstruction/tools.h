@@ -1118,10 +1118,10 @@ tesselateConeOfHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
   * The line is defined as passing through the points provided by the first two arguments
   * while its distance to the point provided by the third argument will be returned.
   *
-  *@param[in] line_point_a The first point on the line
-  *@param[in] line_point_b The second point on the line
-  *@param[in] query_point The query point
-  *@returns The distance from the query point to the line
+  * @param[in] line_point_a The first point on the line
+  * @param[in] line_point_b The second point on the line
+  * @param[in] query_point The query point
+  * @returns The distance from the query point to the line
   */
 template <typename PointT> inline float
 lineToPointDistance (const PointT &line_point_a, const PointT &line_point_b, const PointT &query_point)
@@ -1131,6 +1131,87 @@ lineToPointDistance (const PointT &line_point_a, const PointT &line_point_b, con
   Eigen::Vector3f c (query_point.x, query_point.y, query_point.z);
   Eigen::ParametrizedLine<float, 3> param_line = Eigen::ParametrizedLine<float, 3>::Through (a, b);
   return param_line.distance (c);
+}
+
+
+/**
+ * @brief Template method to convert some pcl point into a geometry_msgs::Point.
+ *
+ * @param[in] point The pcl point
+ * @param[out] out_point The corresponding geometry_msgs::Point
+ */
+template <typename PointT> inline void
+convert (const PointT &point, geometry_msgs::Point &out_point)
+{
+  out_point.x = point.x;
+  out_point.y = point.y;
+  out_point.z = point.z;
+}
+
+/**
+ * @brief Template function to return a mesh represenatation of a given 3D convex hull.
+ * The 3D hull needs to be given as a point cloud and a representation (via indices) of
+ * its facets. A message marker containing a mesh (with correctly oriented facets) and the
+ * center of gravity of the convex hull are returned via output arguments.
+ *
+ * @param[in] hull_cloud The point cloud representing the 3D convex hull
+ * @param[in] facets The factes of the convex hull as a vector of pcl::Vertices
+ * @param[out] maker The visualization_msgs::Marler containing the mesh representation
+ * @param[out] center_of_gravity The center point of the convex hull
+ */
+template <typename PointT> inline void
+tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
+    const std::vector<pcl::Vertices> &facets, visualization_msgs::Marker &marker,
+    Eigen::Vector3f &center_of_gravity)
+{
+  std::vector<Eigen::Vector3f> vertices;
+  std::vector<geometry_msgs::Point> points;
+  vertices.reserve (hull_cloud->points.size ());
+  points.reserve (hull_cloud->points.size ());
+  center_of_gravity = Eigen::Vector3f::Zero ();
+  geometry_msgs::Point tmp_point;
+  Eigen::Vector3f normal, v1, v2, v3;
+  // compute center of gravity of convex hull and convert all points
+  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it = hull_cloud->points.begin ();
+  while (p_it != hull_cloud->points.end ())
+  {
+    vertices.push_back (convert<Eigen::Vector3f, PointT> (*p_it));
+    convert<PointT> (*p_it, tmp_point);
+    points.push_back (tmp_point);
+
+    center_of_gravity[0] += p_it->x;
+    center_of_gravity[1] += p_it->y;
+    center_of_gravity[2] += p_it->z;
+    p_it++;
+  }
+  center_of_gravity /= static_cast<float> (hull_cloud->points.size ());
+
+  marker.points.clear ();
+  marker.points.reserve (facets.size () * 3);
+  for (size_t i = 0; i < facets.size (); ++i)
+  {
+    if (facets[i].vertices.size () != 3)
+    {
+      ROS_WARN ("received facet for convex hull with %lu != 3 vertices; ignoring!", facets[i].vertices.size ());
+      continue;
+    }
+    // check (and correct if neccessary) face orientation
+    v1 = vertices[facets[i].vertices[0]];
+    v2 = vertices[facets[i].vertices[1]];
+    v3 = vertices[facets[i].vertices[2]];
+    normal = (v3 - v1).cross (v2 - v1);
+    marker.points.push_back (points[facets[i].vertices[0]]);
+    if ((v1 - center_of_gravity).dot (normal) > 0.0f)
+    {
+      marker.points.push_back (points[facets[i].vertices[2]]);
+      marker.points.push_back (points[facets[i].vertices[1]]);
+    }
+    else
+    {
+      marker.points.push_back (points[facets[i].vertices[1]]);
+      marker.points.push_back (points[facets[i].vertices[2]]);
+    }
+  }
 }
 
 #endif // TRANSP_OBJ_RECON_TOOLS
