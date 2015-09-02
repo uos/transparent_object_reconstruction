@@ -118,7 +118,8 @@ add_executable(occp_test src/occp_test.cpp)
 target_link_libraries(occp_test ${catkin_LIBRARIES} occupancy_grid hole_region)
 
 # Generate ecto cells
-pubsub_gen_wrap(transparent_object_reconstruction DESTINATION ${PROJECT_NAME} INSTALL)
+pubsub_gen_wrap(${PROJECT_NAME} DESTINATION ${PROJECT_NAME} INSTALL)
+add_dependencies(ecto_${PROJECT_NAME}_ectomodule ${PROJECT_NAME}_generate_messages_cpp)
 
 ectomodule(hole_detection DESTINATION ${PROJECT_NAME} INSTALL
   src/ecto/HoleDetector.cpp
