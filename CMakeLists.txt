@@ -93,6 +93,10 @@ add_executable(HoleIntersector src/HoleIntersector.cpp)
 target_link_libraries(HoleIntersector ${catkin_LIBRARIES} tools)
 add_dependencies(HoleIntersector transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
 
+add_executable(ExTraReconstructedObject src/ExTraReconstructedObject.cpp)
+target_link_libraries(ExTraReconstructedObject ${catkin_LIBRARIES} tools)
+add_dependencies(ExTraReconstructedObject transparent_object_reconstruction_gencfg)
+
 # Tests
 add_executable(hole_test_pub src/hole_test_pub.cpp)
 target_link_libraries(hole_test_pub ${catkin_LIBRARIES})
