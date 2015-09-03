@@ -58,32 +58,10 @@ add_compile_options("-std=c++11")
 include_directories(include ${catkin_INCLUDE_DIRS})
 
 # Libraries
-add_library(hole_region src/hole_region.cpp)
-target_link_libraries(hole_region ${catkin_LIBRARIES})
-
-add_library(occupancy_grid src/occupancy_grid.cpp)
-target_link_libraries(occupancy_grid ${catkin_LIBRARIES} hole_region)
-
 add_library(tools src/tools.cpp)
-target_link_libraries(tools ${catkin_LIBRARIES} occupancy_grid hole_region)
+target_link_libraries(tools ${catkin_LIBRARIES})
 
 # Executables
-add_executable(create_rays src/create_rays.cpp)
-target_link_libraries(create_rays ${catkin_LIBRARIES})
-add_dependencies(create_rays transparent_object_reconstruction_gencfg)
-
-add_executable(intersec src/intersec.cpp)
-target_link_libraries(intersec ${catkin_LIBRARIES})
-add_dependencies(intersec transparent_object_reconstruction_gencfg)
-
-add_executable(combine_clouds_server src/combine_clouds_server.cpp)
-target_link_libraries(combine_clouds_server ${catkin_LIBRARIES})
-add_dependencies(combine_clouds_server transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
-
-add_executable(combine_clouds_client src/combine_clouds_client.cpp)
-target_link_libraries(combine_clouds_client ${catkin_LIBRARIES})
-add_dependencies(combine_clouds_client transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
-
 add_executable(HoleVisualizer src/HoleVisualizer.cpp)
 target_link_libraries(HoleVisualizer ${catkin_LIBRARIES} tools)
 add_dependencies(HoleVisualizer transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
@@ -98,26 +76,6 @@ add_dependencies(HoleIntersector transparent_object_reconstruction_gencfg ${PROJ
 add_executable(ExTraReconstructedObject src/ExTraReconstructedObject.cpp)
 target_link_libraries(ExTraReconstructedObject ${catkin_LIBRARIES} tools)
 add_dependencies(ExTraReconstructedObject transparent_object_reconstruction_gencfg)
-
-# Tests
-add_executable(hole_test_pub src/hole_test_pub.cpp)
-target_link_libraries(hole_test_pub ${catkin_LIBRARIES})
-
-add_executable(hole_test_sub src/hole_test_sub.cpp)
-target_link_libraries(hole_test_sub ${catkin_LIBRARIES})
-
-add_executable(label_cloud_test_pub src/label_cloud_test_pub.cpp)
-target_link_libraries(label_cloud_test_pub ${catkin_LIBRARIES})
-
-add_executable(pcl_sub_test src/pcl_sub_test.cpp)
-target_link_libraries(pcl_sub_test ${catkin_LIBRARIES})
-
-add_executable(holes_msgs_test_pub src/holes_msgs_test_pub.cpp)
-target_link_libraries(holes_msgs_test_pub ${catkin_LIBRARIES})
-add_dependencies(holes_msgs_test_pub transparent_object_reconstruction_gencfg ${PROJECT_NAME}_generate_messages_cpp)
-
-add_executable(occp_test src/occp_test.cpp)
-target_link_libraries(occp_test ${catkin_LIBRARIES} occupancy_grid hole_region)
 
 # Generate ecto cells
 pubsub_gen_wrap(${PROJECT_NAME} DESTINATION ${PROJECT_NAME} INSTALL)

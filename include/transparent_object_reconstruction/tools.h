@@ -31,8 +31,6 @@
 #include <algorithm>
 
 #include <transparent_object_reconstruction/common_typedefs.h>
-#include <transparent_object_reconstruction/hole_region.h>
-#include <transparent_object_reconstruction/occupancy_grid.h>
 
 // collection of methods used to transform point clouds into x-y-plane etc. pp.
 typedef pcl::ModelCoefficients Model;
@@ -63,17 +61,6 @@ const double LINE_PLANE_ANGLE_EPS = 1e-3;
 const double MAX_CORR_DIST = 0.02; // 2cm
 const double MAX_SQRD_CORR_DIST = MAX_CORR_DIST * MAX_CORR_DIST;
 const float MIN_CORRELATION_RATIO = 0.5f;
-
-// threshold to decide when a grid cell is on a plane
-const float ON_PLANE_THRESHOLD = 0.02f;
-// threshold for minimal size of connected grid cells for a HoleRegion
-const size_t MIN_HOLE_REGION_SIZE = 10;
-// threshold to remove hole regions with too much artificial convex
-// border cells
-float MAX_CONVEX_BORDER_THRESHOLD = 0.33f;
-
-// threshold to determine if a hole is caused by a transparent object
-const float MIN_NON_INTERSECED_RATIO = 0.5f;
 
 // threshold for point removal from concave hulls due to potential
 // overlap with other hulls
@@ -397,144 +384,6 @@ createEuclideanClusters (Cloud::ConstPtr input, CloudVector &output,
    double cluster_tolerance);
  
 /**
- * Method transform a HoleRegion back into the scene. Since HoleRegions are
- * established (grown) in an 2D occupancy grid in the x-y-plane they need
- * to be projected back into their appropriate 3D pose to further utilize
- * them in the occlusion analysis. In 3D the HoleRegion is generally
- * presented by the back transformed centers of the occupancy grid. The
- * transformation needed by this method is the original transformation used
- * to transform the plane (containing the HoleRegion) into the x-y-plane.
- * The method computes the inverse for the back transformation.
- *
- * @param[in] hole_region The HoleRegion that will be transformed back into
- *    the scene
- * @param[in] occupancy_grid The occupancy grid, containing information
- *    about the HoleRegion
- * @param[in] plane_transformation The transformation used to tranform the
- *    original plane into the x-y-plane
- * @param[out] trans_hole_cloud The hole region, transformed back into
- *    the scene, represented as a point cloud
- **/
-void
-transformHoleRegionBackToScene (HoleRegion &hole_region,
-    OccupancyGrid &occupancy_grid, Eigen::Affine3f &plane_transformation,
-    CloudPtr trans_hole_cloud);
-
-/**
- * Convenience method to transform a vector of HoleRegion back into the
- * scene. Internally uses 'transformHoleRegionBackToScene ()' to
- * transform each HoleRegion passed in the input vector. For details
- * about the working of the transformations refer to the comments
- * of 'transformHoleRegionBackToScene ()'.
- *
- * @param[in] hole_regions A vector containing the HoleRegions to be
- *   transformed back into the scene
- * @param[in] occupancy_grid The grid containing information about the
- *   HoleRegions
- * @param[in] plane_transformation The affine transformation to move the
- *   plane into the x-y-plane
- * @param[out] trans_hole_regions A vector containing each HoleRegion,
- *   transformed back into the scene and represented as a point cloud
- **/
-void
-transformHoleRegionVectorBackToScene (std::vector<HoleRegion> &hole_regions,
-    OccupancyGrid &occupancy_grid,
-    Eigen::Affine3f &plane_transformation,
-    CloudVector &trans_hole_regions);
-
-/**
- * Method to check which rays from a hole to the camera intersect with
- * some other measurements. This can be used to determine which parts
- * of a hole occured due to occlusion with a measured object and which
- * parts did not. The first argument' hole_cloud' needs to be a point
- * cloud represenation of a HoleRegion, i.e., sampled points inside the
- * hole, detected in a planar surface. The fourth argument 'octree' needs
- * to be an octree containing the remaining measurement points of the
- * scene, while argument 'camera_origin' determines the origin of the
- * camera.
- * Output will be stored in arguments two and three, with the former
- * containing the octree leaves that were intersected by rays from hole to
- * camera and the latter containing all points of 'hole_cloud' where no
- * intersection occured.
- * Note that this method currently might not work correctly for sensors
- * with opening angles above 180°.
- *
- * @param[in] hole_cloud A point cloud representing the hole region
- * @param[out] intersections A point cloud containing intersections of
- *   the rays some measurement points
- * @param[out] remaining_points The points of hole_cloud, whose rays were
- *   not intersected
- * @param[in] octree An octree containing points of the remaining scene
- * @param[in] camera_origin A 3D Vector denoting the origin of the kinect
- * sensor.
- **/
-void
-getHoleRegionIntersections (CloudPtr hole_cloud, CloudPtr intersections,
-    CloudPtr remaining_points,
-    pcl::octree::OctreePointCloudSearch<PointType> & octree,
-    Eigen::Vector3f &camera_origin);
-
-/**
- * Method to check for intersections between hole-to-camera rays and
- * other measurement points. Essentially the same as the 5 argument
- * version, but assuming that the camera's origin is at (0,0,0).
- *
- * @param[in] hole_cloud A point cloud representing the hole region
- * @param[out] intersections A point cloud containing intersections of
- *   the rays some measurement points
- * @param[out] remaining_points The points of hole_cloud, whose rays were
- *   not intersected
- * @param[in] octree An octree containing points of the remaining scene
- **/
-void
-getHoleRegionIntersections (CloudPtr hole_cloud, CloudPtr intersections,
-    CloudPtr remaining_points,
-    pcl::octree::OctreePointCloudSearch<PointType> &octree);
-
-/**
- * Method to check for intersections for a vector of hole regions.
- * Basically just a wrapper, consecutively calling
- * 'getHoleRegionIntersections ()' for each element of the input argument
- * 'hole_clouds'. Accordingly output arguments are also given as vectors
- * of point clouds rather than single point clouds.
- *
- * @param[in] hole_cloud A vector of point clouds representing the hole
- *    regions
- * @param[out] intersections A vector of point clouds containing
- *    intersections of the rays some measurement points
- * @param[out] remaining_points The vector of point cloud, containing the
- *    points for each hole_cloud, whose rays were not intersected
- * @param[in] octree An octree containing points of the remaining scene
- * @param[in] camera_origin A 3D Vector denoting the origin of the kinect
- * sensor.
- **/
-void
-getHoleRegionIntersectionsVector (CloudVector &hole_clouds,
-    CloudVector &intersected_clouds,
-    CloudVector &non_intersected_clouds,
-    pcl::octree::OctreePointCloudSearch<PointType> &octree,
-    Eigen::Vector3f &camera_origin);
-
-/**
- * Method to check for intersections for a vector of hole regions.
- * The same as the 5 argument version, but assuming that the camera
- * origin is at (0,0,0).
- *
- * @param[in] hole_cloud A vector of point clouds representing the hole
- *    regions
- * @param[out] intersections A vector of point clouds containing
- *    intersections of the rays some measurement points
- * @param[out] remaining_points The vector of point cloud, containing the
- *    points for each hole_cloud, whose rays were not intersected
- * @param[in] octree An octree containing points of the remaining scene
- **/
-void
-getHoleRegionIntersectionsVector (CloudVector &hole_clouds,
-    CloudVector &intersected_clouds,
-    CloudVector &non_intersected_clouds,
-    pcl::octree::OctreePointCloudSearch<PointType> &octree);
-
-/**
  * Method wrapper to project a point cloud into a given plane,
  * using 'pcl::ProjectInliers'. Notice that the result will usually
  * differ from 'projectCloudOnPlane ()', which usually yields theh
@@ -655,42 +504,6 @@ calcConvexHullsPerfectPlanes (CloudVector &perfect_planes_vector,
 void
 calcConvexHulls (CloudVector &plane_vector, CloudVector &conv_hulls,
     ModelVector &plane_coeff_vector);
-
-/**
- * Method to create several occupancy grids from given voxel grids, clouds
- * and plane equations. The transformed plane equations are used to
- * determine where the planar surfaces end and how resulting hole regions
- * are restriced.
- *
- * @param[in] voxel_grids A vector of voxel grids
- * @param[in] clouds A vector of point clouds (corresponding to the grids)
- * @param[in] transformed_plane_equations A vector of vectors holding
- *   tranformed plane equations
- * @param[out] occupancy_grids A vector of occupancy grids
- **/
-void
-createOccupancyGrids (std::vector<pcl::VoxelGrid<PointType> > &voxel_grids,
-    CloudVector &clouds,
-    TransPlaneCoeffsVec &transformed_plane_equations,
-    std::vector<boost::shared_ptr<OccupancyGrid> > &occupancy_grids);
-
-/**
- * Method to incorporate convex hulls in the configuration of given
- * occupancy grids. Since the occupancy grids are 2D grids (on the
- * x-y-plane) it is necessary that the convex hull were either computed
- * on planar surfaces transformed onto the x-y-plane or transformed
- * afterwards so that the hulls are correctly aligned with the occupancy
- * grids. Note that the hull lines given by 'hull_lines_vec' need to be
- * represented as a point sampling of the line segements (see
- * 'createHullLines()' and 'createHullLinesVec ()').
- *
- * @param[in] hull_lines_vec A vector of sampled convex hull lines.
- * @param[in,out] occupancy_grids A vector of occupancy grids that are
- *   enriched by the information provided by the convex hull lines
- **/
-void
-addConvHullLinesToOccupancyGrids (CloudVector &hull_lines_vec,
-    std::vector<boost::shared_ptr<OccupancyGrid> > &occupancy_grids);
 
 /**
  * Function to remove points with invalid 3D coordinates from a
@@ -898,34 +711,6 @@ colorPointCloud (CloudPtr cloud, uint8_t r, uint8_t g, uint8_t b);
 void
 colorPointCloudVector (CloudVector &cloud_vector, uint8_t r, uint8_t g,
     int8_t b);
-
-/**
- * Function for visualization of occupancy grid on the command line
- * (primary for debugging purpose) and storage in a ppm file. The ppm
- * filename is auto-generated and depends on input argument 'plane_index'
- * that specifies the planar surface for that the occupancy grid will be
- * visualized. Input argument 'occupancy_grid' is a 2D array containing
- * the values of the occupancy grid, while arguments 'grid_dim_x' and
- * 'grid_dim_y' denote the dimensions of the 2D array. The detected hole
- * regions in the current occupancy grid need to be passed along via input
- * argument 'all_hole_regions'. The function returns the total number of
- * empty grid cells that lie inside the planar surface.
- *
- * @param[in] occupancy_grid A 2D array containing the values of each
- *   grid cell of the occupancy grid
- * @param[in] grid_dim_x The dimension in x direction of the 2D array
- * @param[in] grid_dim_y The dimension in y direction of the 2D array
- * @param[in] all_hole_regions A vector containing all detected hole
- *   regions in the given planar surface / occupancy grid
- * @param[in] plane_index The index of the plane that is represented by
- *   the visualized occupancy grid
- * @return The total number of empty grid cells
- **/
-//TODO: adapt to ros gridmap or something similar
-unsigned int
-printGridToConsole (grid_values** occupancy_grid, unsigned int grid_dim_x,
-    unsigned int grid_dim_y, std::vector<HoleRegion> &all_hole_regions,
-    size_t plane_index);
 
 
 bool
