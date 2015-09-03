@@ -17,7 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
   ecto_pcl
   tf
   tf_conversions
-	object_recognition_msgs
+  object_recognition_msgs
+  bag_loop_check
 )
 
 generate_dynamic_reconfigure_options(
@@ -42,7 +43,7 @@ generate_messages(
   std_msgs
   sensor_msgs
   pcl_msgs
-	object_recognition_msgs
+  object_recognition_msgs
 )
 
 catkin_package(

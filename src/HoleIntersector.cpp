@@ -36,6 +36,8 @@
 #include <transparent_object_reconstruction/tools.h>
 #include <transparent_object_reconstruction/HoleIntersectorReset.h>
 
+#include <bag_loop_check/bag_loop_check.hpp>
+
 typedef pcl::octree::OctreePointCloud<LabelPoint> LabelOctree;
 typedef pcl::octree::OctreeContainerPointIndices LeafContainer;
 
@@ -77,12 +79,11 @@ class HoleIntersector
         return;
       }
 
-      // check for backloop
-      //TODO: refine this hack later
-      if (collected_views_.size () > 0 &&
-          (holes->convex_hulls.front ().header.stamp - collected_views_.back ().stamp) < ros::Duration (-1.0))
+      // check for bag loop
+      static bag_loop_check::BagLoopCheck bagloop;
+      if (bagloop && collected_views_.size () > 0)
       {
-        ROS_INFO ("detected backloop");
+        ROS_INFO ("Detected bag loop; Reseting HoleIntersector");
         transparent_object_reconstruction::HoleIntersectorReset::Request req;
         transparent_object_reconstruction::HoleIntersectorReset::Response res;
         this->reset (req, res);
