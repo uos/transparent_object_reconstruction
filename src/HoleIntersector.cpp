@@ -50,13 +50,13 @@ class HoleIntersector
     {
       setUpVisMarkers ();
 
-      vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "intersec_visualization", 10, true);
-      all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "frusta_visualization", 10, true);
+      vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "/transObjRec/intersec_visualization", 10, true);
+      all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "/transObjRec/frusta_visualization", 10, true);
 
-      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transparent_object_intersection", 10, true);
-      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("partial_intersection", 10, true);
+      intersec_pub_ = nhandle_.advertise<LabelCloud> ("/transObjRec/transparent_object_intersection", 10, true);
+      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("/transObjRec/partial_intersection", 10, true);
 
-      reset_service_ = nhandle_.advertiseService ("collector_reset", &HoleIntersector::reset, this); 
+      reset_service_ = nhandle_.advertiseService ("/transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
 
       hole_sub_ = nhandle_.subscribe ("/table_holes", 1, &HoleIntersector::add_holes_cb, this);
 

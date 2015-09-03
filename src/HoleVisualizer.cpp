@@ -73,7 +73,7 @@ main (int argc, char **argv)
   ros::init (argc, argv, "hole_visualizer");
   ros::NodeHandle n_handle;
 
-  vis_pub = n_handle.advertise<visualization_msgs::Marker> ("/curr_hole_visualization", 10);
+  vis_pub = n_handle.advertise<visualization_msgs::Marker> ("/transObjRec/curr_hole_visualization", 10);
 
   // setup generic marker field
   marker.ns = "table_holes";
