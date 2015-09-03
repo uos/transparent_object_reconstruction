@@ -72,6 +72,7 @@ class ExTraReconstructedObject
       v_grid.filter (*grid_cloud);
 
       ROS_INFO ("created grid cloud with %lu total points", grid_cloud->points.size ());
+      grid_cloud->header = cloud->header; // explicitly copy header information from incoming point cloud
       voxel_cloud_pub_.publish (*grid_cloud);
       
       // TODO: in theory a 3D region growing could also be done here and proof quicker (iff cloud was voxelized)
@@ -139,6 +140,7 @@ class ExTraReconstructedObject
           p_it->label = i;
           p_it++;
         }
+        output[i]->header = cloud->header; // explicitly copy header information
         cluster_pub_.publish (*output[i]);
         h += color_increment;
         total_points += output[i]->points.size ();
@@ -147,7 +149,7 @@ class ExTraReconstructedObject
         LabelCloudPtr convex_hull (new LabelCloud);
         std::vector<pcl::Vertices> polygons;
         pcl::ConvexHull<LabelPoint> c_hull;
-        c_hull.setInputCloud (grid_cloud);
+        c_hull.setInputCloud (output[i]);
         c_hull.setDimension (3);
         c_hull.reconstruct (*convex_hull, polygons);
 
