@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   ecto_pcl
   tf
   tf_conversions
+	object_recognition_msgs
 )
 
 generate_dynamic_reconfigure_options(
@@ -41,12 +42,13 @@ generate_messages(
   std_msgs
   sensor_msgs
   pcl_msgs
+	object_recognition_msgs
 )
 
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES transparent_object_reconstruction
-#  CATKIN_DEPENDS dynamic_reconfigure pcl_conversions pcl_msgs pcl_ros roscpp rospy sensor_msgs std_msgs visualization_msgs
+#  CATKIN_DEPENDS dynamic_reconfigure pcl_conversions pcl_msgs pcl_ros roscpp rospy sensor_msgs std_msgs visualization_msgs object_recognition_msgs
 #  DEPENDS system_lib
 )
 

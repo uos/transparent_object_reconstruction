@@ -24,6 +24,9 @@
 #include <pcl/search/kdtree.h>
 #include <pcl/octree/octree.h>
 
+#include <object_recognition_msgs/RecognizedObject.h>
+#include <object_recognition_msgs/RecognizedObjectArray.h>
+
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/tools.h>
 
@@ -39,17 +42,21 @@ class ExTraReconstructedObject
       min_cluster_size_ (min_cluster_size),
       max_cluster_size_ (max_cluster_size)
     {
-      voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("voxelized_intersection", 10, true);
+      voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("/voxelized_intersection", 10, true);
 
-      cluster_pub_ = nhandle_.advertise<LabelCloud> ("intersec_clusters", 10, true);
+      cluster_pub_ = nhandle_.advertise<LabelCloud> ("/intersec_clusters", 10, true);
 
-      all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("intersec_cluster_hulls", 10, true);
+      all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("/intersec_cluster_hulls", 10, true);
+
+      result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("/trans_recon_results", 10, true);
 
       intersec_sub_ = nhandle_.subscribe ("/transparent_object_intersection", 1, &ExTraReconstructedObject::intersec_cb, this);
 
       ROS_INFO ("created ExTraReconstructedObject and subscribed to topic");
 
       setUpVisMarker ();
+
+      db_type = "{\"type\":\"empty\"}";
     };
 
     void intersec_cb (const LabelCloud::ConstPtr &cloud)
@@ -107,8 +114,15 @@ class ExTraReconstructedObject
       h = 0.0f;
       size_t total_points = 0;
 
+      // prepare markers for convex hulls
       visualization_msgs::MarkerArray all_hulls;
       all_hulls.markers.reserve (output.size ());
+
+      // prepare recognized object array
+      object_recognition_msgs::RecognizedObjectArray::Ptr transparent_recon_objs = boost::make_shared<object_recognition_msgs::RecognizedObjectArray> ();
+      // set header - should correspond with the header from the cloud
+      pcl_conversions::fromPCL (cloud->header, transparent_recon_objs->header);
+      transparent_recon_objs->objects.reserve (output.size ());
 
       for (size_t i = 0; i < output.size (); ++i)
       {
@@ -153,10 +167,40 @@ class ExTraReconstructedObject
 
         // add current marker to marker array
         all_hulls.markers.push_back (curr_hull_marker);
+
+        // create riecongnized obj
+        ss.str ("");
+        ss << "trans_obj" << std::setw (2) << std::setfill ('0') << i;
+
+        object_recognition_msgs::RecognizedObject o;
+        o.type.db = db_type;
+        o.type.key = ss.str ();
+        o.confidence = 1.0f;
+        o.header = transparent_recon_objs->header;
+        o.pose.header = transparent_recon_objs->header;
+        // use center of gravity as reference point
+        o.pose.pose.pose.position.x = cog[0];
+        o.pose.pose.pose.position.y = cog[1];
+        o.pose.pose.pose.position.z = cog[2];
+        // use orientation from tabletop
+        o.pose.pose.pose.orientation.x = 0.0f;
+        o.pose.pose.pose.orientation.y = 0.0f;
+        o.pose.pose.pose.orientation.z = 0.0f;
+        o.pose.pose.pose.orientation.w = 1.0f;
+        sensor_msgs::PointCloud2 pc2;
+        pcl::toROSMsg (*grid_cloud, pc2);
+        o.point_clouds.push_back (pc2);
+        // TODO: should the mesh also be inserted into the recognizedObj?
+
+        // TODO: should covariance be set to identity matrix or remain 0-matrix?
+
+        transparent_recon_objs->objects.push_back (o);
       }
       
       // publish the convex hulls of all clusters
       all_hulls_vis_pub_.publish (all_hulls);
+
+      result_pub_.publish (transparent_recon_objs);
 
       ROS_INFO ("finished callback, published %lu clusters with a total of %lu points",
           output.size (), total_points);
@@ -170,8 +214,11 @@ class ExTraReconstructedObject
     ros::Publisher voxel_cloud_pub_;
     ros::Publisher all_hulls_vis_pub_;
     ros::Publisher cluster_pub_;
+    ros::Publisher result_pub_;
 
     visualization_msgs::Marker hull_marker_;
+
+    std::string db_type;
 
     // TODO: set these values (via constructor?)
     float cluster_tolerance_;
