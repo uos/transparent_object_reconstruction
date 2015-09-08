@@ -92,28 +92,50 @@ struct HoleDetector
       c_hull.getHullPointIndices (convex_hull_indices);
     }
 
+  // TODO: more sophisticated test could check if the hull only touches the border (with on point)
+  // or if there are consecutive points that touch the same border
   template <typename PointT>
-    void addRemoveIndices (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
+    void get2DHullBBox (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
         const std::vector<Eigen::Vector2i> &convex_hull,
-        ::pcl::PointIndices::Ptr &remove_indices)
+        Eigen::Vector2i &min_bbox, Eigen::Vector2i &max_bbox, bool &touches_border)
     {
-      // retrieve 2D bbox of convex hull
-      Eigen::Vector2i min (cloud->width, cloud->height);
-      Eigen::Vector2i max (0, 0);
+      min_bbox = Eigen::Vector2i (cloud->width, cloud->height);
+      max_bbox = Eigen::Vector2i::Zero ();
 
       std::vector<Eigen::Vector2i>::const_iterator hull_it = convex_hull.begin ();
       while (hull_it != convex_hull.end ())
       {
-        if ((*hull_it)[0] < min[0])
-          min[0] = (*hull_it)[0];
-        if ((*hull_it)[1] < min[1])
-          min[1] = (*hull_it)[1];
-        if ((*hull_it)[0] > max[0])
-          max[0] = (*hull_it)[0];
-        if ((*hull_it)[1] > max[1])
-          max[1] = (*hull_it)[1];
+        if ((*hull_it)[0] < min_bbox[0])
+          min_bbox[0] = (*hull_it)[0];
+        if ((*hull_it)[1] < min_bbox[1])
+          min_bbox[1] = (*hull_it)[1];
+        if ((*hull_it)[0] > max_bbox[0])
+          max_bbox[0] = (*hull_it)[0];
+        if ((*hull_it)[1] > max_bbox[1])
+          max_bbox[1] = (*hull_it)[1];
         hull_it++;
       }
+
+      if (min_bbox[0] == 0 || min_bbox[1] == 0 ||
+          max_bbox[0] == cloud->width - 1 || max_bbox[1] == cloud->height - 1)
+      {
+        touches_border = true;
+      }
+      else
+      {
+        touches_border = false;
+      }
+    }
+
+
+  template <typename PointT>
+    void addRemoveIndices (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
+        const std::vector<Eigen::Vector2i> &convex_hull,
+        ::pcl::PointIndices::Ptr &remove_indices, bool &touches_border)
+    {
+      // retrieve 2D bbox of convex hull
+      Eigen::Vector2i min, max;
+      get2DHullBBox (cloud, convex_hull, min, max, touches_border);
 
       // reserve the upper limit of newly needed entries into remove_indices
       remove_indices->indices.reserve (remove_indices->indices.size () + (max[0] - min[0]) * (max[1] - min[1]));
@@ -338,7 +360,6 @@ struct HoleDetector
       getBoundingBox2DConvexHull (input, **hull_indices_, table_min, table_max, hull_2Dcoords);
 
       // retrieve the 3D coordinates of the convex hull of the tabletop
-
       auto table_convex_hull = boost::make_shared<::pcl::PointCloud<PointT> > ();
       table_convex_hull->points.reserve ((*hull_indices_)->indices.size ());
       std::vector<int>::const_iterator hull_index_it = (*hull_indices_)->indices.begin ();
@@ -441,7 +462,7 @@ struct HoleDetector
       Eigen::Vector4f plane_coefficients ((*model_)->values[0], (*model_)->values[1],
           (*model_)->values[2], (*model_)->values[3]);
 
-      // create representations for the holes in the plane (atm only for complete hulls)
+      // create representations for the holes completely inside convex hull of table top
       auto holes_msg= boost::make_shared<transparent_object_reconstruction::Holes>();
       holes_msg->convex_hulls.reserve (inside_holes.size ());
       for (size_t i = 0; i < inside_holes.size (); ++i)
@@ -472,6 +493,7 @@ struct HoleDetector
         if (avg_dist > *plane_dist_threshold_)
         {
           // skip hole! should something more be done?
+          // TODO: remove measurement points inside hole anyway?
           continue;
         }
 
@@ -488,12 +510,17 @@ struct HoleDetector
           convex_hull_polygon.push_back (inside_borders[i][*hull_it++]);
         }
         // store indices of points that are inside the convex hull - these will be removed later
-        addRemoveIndices (input, convex_hull_polygon, remove_indices);
+        bool touches_border;
+        addRemoveIndices (input, convex_hull_polygon, remove_indices, touches_border);
 
-        // add current hole to Hole message
-        sensor_msgs::PointCloud2 pc2;
-        pcl::toROSMsg (*conv_border_cloud, pc2);
-        holes_msg->convex_hulls.push_back (pc2);
+        if (!touches_border)
+        {
+          // add current hole to Hole message
+          sensor_msgs::PointCloud2 pc2;
+          pcl::toROSMsg (*conv_border_cloud, pc2);
+          holes_msg->convex_hulls.push_back (pc2);
+        }
+        // else discard the hole
       }
 
       // work on the holes that are partially inside the convex hull
@@ -613,12 +640,17 @@ struct HoleDetector
               convex_hull_polygon.push_back (overlap_borders[i][*hull_it++]);
             }
             // store indices of points that are inside the convex hull - these will be removed later
-            addRemoveIndices (input, convex_hull_polygon, remove_indices);
+            bool touches_border;
+            addRemoveIndices (input, convex_hull_polygon, remove_indices, touches_border);
 
-            // add current hole to Hole message
-            sensor_msgs::PointCloud2 pc2;
-            pcl::toROSMsg (*conv_border_cloud, pc2);
-            holes_msg->convex_hulls.push_back (pc2);
+            if (!touches_border)
+            {
+              // add current hole to Hole message
+              sensor_msgs::PointCloud2 pc2;
+              pcl::toROSMsg (*conv_border_cloud, pc2);
+              holes_msg->convex_hulls.push_back (pc2);
+            }
+            // else discard the hole
           }
         }
       }
