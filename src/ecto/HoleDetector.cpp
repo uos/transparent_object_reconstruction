@@ -328,61 +328,8 @@ struct HoleDetector
     int process( const tendrils& inputs, const tendrils& outputs,
         boost::shared_ptr<const ::pcl::PointCloud<PointT> >& input)
     {
-      Eigen::Affine3f trans;
-      Eigen::Affine3f back_trans;
-      Eigen::Vector3f center = Eigen::Vector3f::Zero ();
       Eigen::Vector3f plane_normal = Eigen::Vector3f ((*model_)->values[0],
           (*model_)->values[1], (*model_)->values[2]);
-      std::vector<Eigen::Vector3f> min_points (3);
-      std::vector<Eigen::Vector3f> max_points (3);
-      for (size_t i = 0; i < 3; ++i)
-      {
-        min_points[i] = Eigen::Vector3f (std::numeric_limits<float>::max (),
-            std::numeric_limits<float>::max (),
-            std::numeric_limits<float>::max ());
-        max_points[i] = Eigen::Vector3f (-std::numeric_limits<float>::max (),
-            -std::numeric_limits<float>::max (),
-            -std::numeric_limits<float>::max ());
-      }
-      auto inlier_it = input->points.begin ();
-      while (inlier_it != input->points.end ())
-      {
-        if (inlier_it-> x < min_points[0][0])
-        {
-          min_points[0] = Eigen::Vector3f (inlier_it->x, inlier_it->y, inlier_it->z);
-        }
-        if (inlier_it-> x < min_points[1][1])
-        {
-          min_points[1] = Eigen::Vector3f (inlier_it->x, inlier_it->y, inlier_it->z);
-        }
-        if (inlier_it-> x < min_points[2][2])
-        {
-          min_points[2] = Eigen::Vector3f (inlier_it->x, inlier_it->y, inlier_it->z);
-        }
-        if (inlier_it->x > max_points[0][0])
-        {
-          max_points[0] = Eigen::Vector3f (inlier_it->x, inlier_it->y, inlier_it->z);
-        }
-        if (inlier_it->y > max_points[1][1])
-        {
-          max_points[1] = Eigen::Vector3f (inlier_it->x, inlier_it->y, inlier_it->z);
-        }
-        if (inlier_it->z > max_points[2][2])
-        {
-          max_points[2] = Eigen::Vector3f (inlier_it->x, inlier_it->y, inlier_it->z);
-        }
-        inlier_it++;
-      }
-      for (size_t i = 0; i < 3; ++i)
-      {
-        center[0] += min_points[i][0] + max_points[i][0];
-        center[1] += min_points[i][1] + max_points[i][1];
-        center[2] += min_points[i][2] + max_points[i][2];
-      }
-      center /= 6.0f;
-
-      calcPlaneTransformation (plane_normal, center, trans);
-      back_trans = trans.inverse ();
 
       Eigen::Vector2i table_min, table_max;
       std::vector<Eigen::Vector2i> hull_2Dcoords;
