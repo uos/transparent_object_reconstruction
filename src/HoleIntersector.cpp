@@ -52,15 +52,15 @@ class HoleIntersector
     {
       setUpVisMarkers ();
 
-      vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "/transObjRec/intersec_visualization", 10, true);
-      all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "/transObjRec/frusta_visualization", 10, true);
+      vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
+      all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
 
-      intersec_pub_ = nhandle_.advertise<LabelCloud> ("/transObjRec/transparent_object_intersection", 10, true);
-      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("/transObjRec/partial_intersection", 10, true);
+      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/transparent_object_intersection", 10, true);
+      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/partial_intersection", 10, true);
 
-      reset_service_ = nhandle_.advertiseService ("/transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
+      reset_service_ = nhandle_.advertiseService ("transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
 
-      hole_sub_ = nhandle_.subscribe ("/table_holes", 1, &HoleIntersector::add_holes_cb, this);
+      hole_sub_ = nhandle_.subscribe ("table_holes", 1, &HoleIntersector::add_holes_cb, this);
 
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
@@ -340,7 +340,7 @@ class HoleIntersector
         // remove old point indices
         leaf_point_indices->indices.clear ();
 
-        // retreave container for the current leaf
+        // retrieve container for the current leaf
         LeafContainer &container = leaf_it.getLeafContainer ();
         container.getPointIndices (leaf_point_indices->indices);
 
@@ -664,7 +664,7 @@ int main (int argc, char **argv)
 {
   ros::init (argc, argv, "HoleIntersector");
 
-  HoleIntersector h (0.005f, 1, "/tracked_table");
+  HoleIntersector h (0.005f, 1, "tracked_table");
 
   ros::spin ();
 

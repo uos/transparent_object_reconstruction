@@ -42,15 +42,15 @@ class ExTraReconstructedObject
       min_cluster_size_ (min_cluster_size),
       max_cluster_size_ (max_cluster_size)
     {
-      voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("/transObjRec/voxelized_intersection", 10, true);
+      voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/voxelized_intersection", 10, true);
 
-      cluster_pub_ = nhandle_.advertise<LabelCloud> ("/transObjRec/intersec_clusters", 10, true);
+      cluster_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersec_clusters", 10, true);
 
-      all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("/transObjRec/intersec_cluster_hulls", 10, true);
+      all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("transObjRec/intersec_cluster_hulls", 10, true);
 
-      result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("/transObjRec/trans_recon_results", 10, true);
+      result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("transObjRec/trans_recon_results", 10, true);
 
-      intersec_sub_ = nhandle_.subscribe ("/transObjRec/transparent_object_intersection", 1, &ExTraReconstructedObject::intersec_cb, this);
+      intersec_sub_ = nhandle_.subscribe ("transObjRec/transparent_object_intersection", 1, &ExTraReconstructedObject::intersec_cb, this);
 
       ROS_INFO ("created ExTraReconstructedObject and subscribed to topic");
 
