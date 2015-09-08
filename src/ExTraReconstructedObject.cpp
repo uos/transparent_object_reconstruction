@@ -63,6 +63,10 @@ class ExTraReconstructedObject
     {
       ROS_INFO ("received intersection cloud with %lu points", cloud->points.size ());
 
+      // clear old marker
+      pcl_conversions::fromPCL (cloud->header, clear_marker_array_.markers.front ().header);
+      all_hulls_vis_pub_.publish (clear_marker_array_);
+
       // reduce number of points that need to be clustered via voxel grid
       LabelCloudPtr grid_cloud (new LabelCloud);
       pcl::VoxelGrid<LabelPoint> v_grid;
@@ -219,6 +223,7 @@ class ExTraReconstructedObject
     ros::Publisher result_pub_;
 
     visualization_msgs::Marker hull_marker_;
+    visualization_msgs::MarkerArray clear_marker_array_;
 
     std::string db_type;
 
@@ -245,6 +250,11 @@ class ExTraReconstructedObject
       hull_marker_.color.r = 0.0;
       hull_marker_.color.g = 0.0;
       hull_marker_.color.b = 0.0;
+
+      visualization_msgs::Marker clear_marker (hull_marker_);
+      // DELETEALL is not officially around before jade, addressed it by value
+      clear_marker.action = 3;
+      clear_marker_array_.markers.push_back (clear_marker);
     };
 };
 
