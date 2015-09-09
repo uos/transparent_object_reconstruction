@@ -129,6 +129,62 @@ struct HoleDetector
 
 
   template <typename PointT>
+    float holeBorderLowerBoundDist2 (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &hole_border_a,
+        boost::shared_ptr<const ::pcl::PointCloud<PointT> > &hole_border_b)
+    {
+      Eigen::Vector4f min_a, min_b, max_a, max_b;
+      ::pcl::getMinMax3D<PointT> (*hole_border_a, min_a, max_a);
+      ::pcl::getMinMax3D<PointT> (*hole_border_b, min_b, max_b);
+
+      Eigen::Vector3f min_dist = Eigen::Vector3f::Zero ();
+      // determine minimal distance of bboxes in each dimension
+      for (size_t i = 0; i < 3; ++i)
+      {
+        if (max_b[i] < min_a[i])
+        {
+          min_dist[i] = min_a[i] - max_b[i];
+        }
+        else if (max_a[i] < min_b[i])
+        {
+          min_dist[i] = min_b[i] - max_a[i];
+        }
+      }
+
+      return min_dist.dot (min_dist);
+    }
+
+
+  template <typename PointT>
+    float minHoleBorderDist (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &hole_border_a,
+        boost::shared_ptr<const ::pcl::PointCloud<PointT> > &hole_border_b)
+    {
+      typename ::pcl::PointCloud<PointT>::VectorType::const_iterator p_it = hole_border_a->points.begin ();
+      typename ::pcl::PointCloud<PointT>::VectorType::const_iterator line_end_it;
+      PointT line_start;
+      float min_dist = std::numeric_limits<float>::max ();
+      float dist_to_line;
+
+      while (p_it != hole_border_a->points.end ())
+      {
+        line_start = hole_border_b->points.back ();
+        line_end_it = hole_border_b->points.begin ();
+        while (line_end_it != hole_border_b->points.end ())
+        {
+          dist_to_line = lineToPointDistance (line_start, *line_end_it, *p_it);
+          if (dist_to_line < min_dist)
+          {
+            min_dist = dist_to_line;
+          }
+          line_start = *line_end_it;
+          line_end_it++;
+        }
+        p_it++;
+      }
+      return min_dist;
+    }
+
+
+  template <typename PointT>
     void addRemoveIndices (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
         const std::vector<Eigen::Vector2i> &convex_hull,
         ::pcl::PointIndices::Ptr &remove_indices, bool &touches_border)
