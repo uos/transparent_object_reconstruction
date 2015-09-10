@@ -170,7 +170,7 @@ struct HoleDetector
         line_end_it = hole_border_b->points.begin ();
         while (line_end_it != hole_border_b->points.end ())
         {
-          dist_to_line = lineToPointDistance (line_start, *line_end_it, *p_it);
+          dist_to_line = lineSegmentToPointDistance (line_start, *line_end_it, *p_it);
           if (dist_to_line < min_dist)
           {
             min_dist = dist_to_line;
