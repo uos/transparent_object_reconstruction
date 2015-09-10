@@ -918,6 +918,51 @@ lineToPointDistance (const PointT &line_point_a, const PointT &line_point_b, con
   return param_line.distance (c);
 }
 
+/**
+  * @brief Template function to return the distance of a point to a given line segment.
+  * The line segment its defined by its start and end point, provided in the first two
+  * arguments.
+  *
+  * @param[in] segment_start The start point of the line segment.
+  * @param[in] segment_end The end point of the line segment.
+  * @param[in] query_point The query point of which the distance to the segment is desired.
+  * @returns The distance from the query point to the line segment.
+  */
+template <typename PointT> inline float
+lineSegmentToPointDistance (const PointT &segment_start, const PointT &segment_end, const PointT &query_point)
+{
+  Eigen::Vector3f a (segment_start.x, segment_start.y, segment_start.z);
+  Eigen::Vector3f b (segment_end.x, segment_end.y, segment_end.z);
+  Eigen::Vector3f c (query_point.x, query_point.y, query_point.z);
+
+  Eigen::Vector3f segment_base = b - a;
+  Eigen::Vector3f start_to_query = c - a;
+
+  float cos_segment_start_to_query, cos_segment_end_to_query;
+
+  // get the cosine between the vector start->end and start->query_point
+  cos_segment_start_to_query = start_to_query.dot (segment_base);
+  // check if angle between line segment and start->query_point is larger than 90°
+  if (cos_segment_start_to_query <= 0)  // query point is before segment start
+  {
+    // return distance between query point and segment start
+    return sqrt (start_to_query.dot (start_to_query));
+  }
+  // get the cosine between (extension of) line segment and end->query_point
+  cos_segment_end_to_query = segment_base.dot (segment_base);
+  // check if angle between (extension of) line segment and end->query is smaller than 90°
+  if (cos_segment_end_to_query <= cos_segment_start_to_query) // query point is after segment end
+  {
+    return sqrt ((c - b).dot (c - b));
+  }
+  float tmp = cos_segment_start_to_query / cos_segment_end_to_query;
+
+  // get the projection of the query point onto line segment
+  Eigen::Vector3f proj = a + tmp * segment_base;
+
+  // return distance between query point and its projection
+  return sqrt ((c - proj).dot (c - proj));
+}
 
 /**
  * @brief Template method to convert some pcl point into a geometry_msgs::Point.
