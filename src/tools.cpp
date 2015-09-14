@@ -1747,3 +1747,37 @@ hsv2rgb (float h, float &r, float &g, float &b)
     r = g = b = 1.0f;
   }
 }
+
+
+float
+lineSegmentToPointDistance (const Eigen::Vector3f &segment_start, const Eigen::Vector3f &segment_end,
+    const Eigen::Vector3f query_point)
+{
+  Eigen::Vector3f segment_base = segment_end - segment_start;
+  Eigen::Vector3f start_to_query = query_point - segment_start;
+
+  float cos_segment_start_to_query, cos_segment_end_to_query;
+
+  // get the cosine between the vector start->end and start->query_point
+  cos_segment_start_to_query = start_to_query.dot (segment_base);
+  // check if angle between line segment and start->query_point is larger than 90°
+  if (cos_segment_start_to_query <= 0)  // query point is before segment start
+  {
+    // return distance between query point and segment start
+    return sqrt (start_to_query.dot (start_to_query));
+  }
+  // get the cosine between (extension of) line segment and end->query_point
+  cos_segment_end_to_query = segment_base.dot (segment_base);
+  // check if angle between (extension of) line segment and end->query is smaller than 90°
+  if (cos_segment_end_to_query <= cos_segment_start_to_query) // query point is after segment end
+  {
+    return sqrt ((query_point - segment_end).dot (query_point - segment_end));
+  }
+  float tmp = cos_segment_start_to_query / cos_segment_end_to_query;
+
+  // get the projection of the query point onto line segment
+  Eigen::Vector3f proj = segment_start + tmp * segment_base;
+
+  // return distance between query point and its projection
+  return sqrt ((query_point - proj).dot (query_point - proj));
+}
