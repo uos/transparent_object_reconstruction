@@ -271,14 +271,34 @@ cropPointCloudBySpecifiedPlanes (CloudPtr cloud,
  * polygon lie in the same plane. If any of these conditions is not met
  * the returned results might not correspond with expectations.
  *
- * @param[in] polygon The polygon given as the stored vertices in a point
- *   cloud.
+ * @param[in] polygon The polygon given as a std::vector of Eigen::Vector3f
  * @param[in] query_point The query point that will be checked.
  * @return true if the query point lies inside the polygon;
  *   false otherwise
  **/
 bool
-pointInsidePolygon (Cloud::ConstPtr polygon, PointType query_point);
+pointInsideConvexPolygon (const std::vector<Eigen::Vector3f> &polygon, const Eigen::Vector3f &query_point);
+
+/**
+  * Templated version for point clouds of function 'pointInsideConvexPolygon ()'.
+  * Internally converts the point cloud to a std::vector<Eigen::Vector3f> and calls the
+  * non-templated version.
+  */
+template <typename PointT> inline bool
+pointInsideConvexPolygon (const typename pcl::PointCloud<PointT>::ConstPtr &polygon, PointT query_point)
+{
+  std::vector<Eigen::Vector3f> p;
+  p.reserve (polygon->points.size ());
+  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it = polygon->points.begin ();
+  while (p_it != polygon->points.end ())
+  {
+    p.push_back (Eigen::Vector3f (p_it->x, p_it->y, p_it->z));
+    p_it++;
+  }
+  Eigen::Vector3f q (query_point.x, query_point.y, query_point.z);
+
+  return pointInsideConvexPolygon (p, q);
+}
 
 /**
   * Method to filter points of a projected cluster hull via a polygon.
@@ -293,7 +313,7 @@ pointInsidePolygon (Cloud::ConstPtr polygon, PointType query_point);
   * will consist of all projected points of the cluster contour that lie
   * inside the convex hull of the plane.
   * Note that the test if a projected cluster contour point lies inside the
-  * convex hull is performed by 'pointInsidePolygon ()'.
+  * convex hull is performed by 'pointInsideConvexPolygon ()'.
   *
   * @param[in] plane_convex_hull The convex hull of a plane
   * @param[in] proj_cluster_hull The points of a cluster hull, projected

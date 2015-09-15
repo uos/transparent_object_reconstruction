@@ -704,33 +704,36 @@ cropPointCloudBySpecifiedPlanes (CloudPtr cloud,
 }
 
 bool
-pointInsidePolygon (Cloud::ConstPtr polygon, PointType query_point)
+pointInsideConvexPolygon (const std::vector<Eigen::Vector3f> &polygon, const Eigen::Vector3f &query_point)
 {
   double angle_sum = 0;
   float sqrd_dist1, sqrd_dist2;
-  float tmp;
   Eigen::Vector3f p1, p2;
-  Eigen::Vector3f q (query_point.x , query_point.y, query_point.z);
-  PointType tmp1, tmp2;
-  for (size_t i = 0; i < polygon->points.size (); ++i)
+  std::vector<Eigen::Vector3f>::const_iterator p_it;
+  p_it = --polygon.end ();
+  p2 = (*p_it) - query_point;
+  sqrd_dist2 = p2.squaredNorm ();
+  if (sqrd_dist2 < MAX_SQRD_CORR_DIST)  // query point is (almost) identical with p2
   {
-    tmp1 = polygon->points[i];
-    tmp2 = polygon->points[(i+1) % polygon->points.size ()];
-    p1 = Eigen::Vector3f (tmp1.x, tmp1.y, tmp1.z);
-    p2 = Eigen::Vector3f (tmp2.x, tmp2.y, tmp2.z);
-    p1 -= q;
-    p2 -= q;
-    sqrd_dist1 = p1.squaredNorm ();
-    sqrd_dist2 = p2.squaredNorm ();
+    return true;
+  }
+  p_it = polygon.begin ();
 
-    // check if query point is on one of the two vertices (or close enough)
-    if (sqrd_dist1 < MAX_SQRD_CORR_DIST || sqrd_dist2 < MAX_SQRD_CORR_DIST)
+  while (p_it != polygon.end ())
+  {
+    p1 = (*p_it) - query_point;
+    sqrd_dist1 = p1.squaredNorm ();
+    // is query point (almost) identical with p1?
+    if (sqrd_dist1 < MAX_SQRD_CORR_DIST)
     {
-      angle_sum = 2 * M_PI;
-      break;
+      return true;
     }
     angle_sum += acos (p1.dot (p2) / sqrt (sqrd_dist1 * sqrd_dist2));
+    p2 = p1;
+    sqrd_dist2 = sqrd_dist1;
+    p_it++;
   }
+
   if ( fabs (angle_sum - 2 * M_PI) < LINE_PLANE_ANGLE_EPS)
     return true;
   return false;
@@ -747,7 +750,7 @@ cropClusterHullByPlaneHull (Cloud::ConstPtr plane_convex_hull,
   for (size_t i = 0; i < proj_cluster_hull->points.size (); ++i)
   {
     query_point = proj_cluster_hull->points[i];
-    if (pointInsidePolygon (plane_convex_hull, query_point))
+    if (pointInsideConvexPolygon (plane_convex_hull, query_point))
     {
       nr_inliers++;
       filtered_cluster_hull.points.push_back (query_point);
