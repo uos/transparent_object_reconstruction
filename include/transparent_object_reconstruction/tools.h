@@ -58,7 +58,7 @@ const double LINE_PLANE_ANGLE_EPS = 1e-3;
 
 // threshold for closest point plane <-> concave hull
 // TODO: threshold could be made accesible via command line
-const double MAX_CORR_DIST = 0.02; // 2cm
+const double MAX_CORR_DIST = 0.005; // 0.5cm
 const double MAX_SQRD_CORR_DIST = MAX_CORR_DIST * MAX_CORR_DIST;
 const float MIN_CORRELATION_RATIO = 0.5f;
 
