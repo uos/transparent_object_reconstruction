@@ -1784,3 +1784,28 @@ lineSegmentToPointDistance (const Eigen::Vector3f &segment_start, const Eigen::V
   // return distance between query point and its projection
   return sqrt ((query_point - proj).dot (query_point - proj));
 }
+
+bool
+doConvexHulls2DIntersect (const std::vector<Eigen::Vector3f> &convex_hull_a,
+    const std::vector<Eigen::Vector3f> &convex_hull_b)
+{
+  std::vector<Eigen::Vector3f>::const_iterator hull_it;
+  hull_it = convex_hull_a.begin ();
+  while (hull_it != convex_hull_a.end ())
+  {
+    if (pointInsideConvexPolygon (convex_hull_b, *hull_it++))
+    {
+      return true;
+    }
+  }
+  hull_it  = convex_hull_b.begin ();
+  while (hull_it != convex_hull_b.end ())
+  {
+    if (pointInsideConvexPolygon (convex_hull_a, *hull_it++))
+    {
+      return true;
+    }
+  }
+
+  return false;
+}

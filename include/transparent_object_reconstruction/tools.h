@@ -1063,4 +1063,48 @@ tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
   }
 }
 
+
+/**
+  * @brief: Function to check if two 2D convex hulls intersect, i.e., if at least one point of
+  * the first convex hull lies inside the second or vice versa.
+  *
+  * The convex hulls need to be 2 dimensional (thus they form closed polygons) and be aligned in
+  * same hyperplane in 3D space.
+  * Both convex hulls need to be given as std::vector<Eigen::Vector3f> with the ordering
+  * corresponding to the arrangement of the vertices of the convex hull polygons, i.e., between
+  * subsequent entries in the vector an edge is assumed (and between the first and the last
+  * element).
+  * Note that if the polygons are not aligned in the same plane, are not 2 dimensional or not
+  * convex the behaviour is undefined.
+  *
+  * @param[in] convex_hull_a The polygon describing the first convex hull polygon.
+  * @param[in] convex_hull_b The polygon describing the second convex hull polygon.
+  * @returns True if the convex hulls intersect, false otherwise
+  */
+bool
+doConvexHulls2DIntersect (const std::vector<Eigen::Vector3f> &convex_hull_a,
+    const std::vector<Eigen::Vector3f> &convex_hull_b);
+
+/**
+  * @brief: Templated version of 'doConvexHulls2DIntersect ()' where convex hulls are represented
+  * as point clouds rather, than vectors of 'Eigen::Vector3f'.
+  * Internally converts the point clouds and uses the non-template version of
+  * 'doConvexHulls2DIntersect ()' (refer there for additional documentation).
+  *
+  * @param[in] convex_hull_a The polygon describing the first convex hull polygon.
+  * @param[in] convex_hull_b The polygon describing the second convex hull polygon.
+  */
+template <typename PointT> inline bool
+doConvexHulls2DIntersect (const typename pcl::PointCloud<PointT>::ConstPtr &convex_hull_a,
+   const typename pcl::PointCloud<PointT>::ConstPtr &convex_hull_b)
+{
+  std::vector<Eigen::Vector3f> c_hull_a;
+  std::vector<Eigen::Vector3f> c_hull_b;
+
+  convert<PointT> (convex_hull_a, c_hull_a);
+  convert<PointT> (convex_hull_b, c_hull_b);
+
+  return doConvexHulls2DIntersect (c_hull_a, c_hull_b);
+}
+
 #endif // TRANSP_OBJ_RECON_TOOLS
