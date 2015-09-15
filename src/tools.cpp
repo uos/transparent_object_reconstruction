@@ -1785,6 +1785,171 @@ lineSegmentToPointDistance (const Eigen::Vector3f &segment_start, const Eigen::V
   return sqrt ((query_point - proj).dot (query_point - proj));
 }
 
+float
+convexHullsMindDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
+    std::vector<Eigen::Vector3f> &convex_hull_b)
+{
+  // TODO: remove later
+  std::string red_start = "\033[1;31m";
+  std::string red_end = "\033[0m";
+
+  // get centroids
+  Eigen::Vector3f centroid_a = getCentroid (convex_hull_a);
+  Eigen::Vector3f centroid_b = getCentroid (convex_hull_b);
+  std::vector<Eigen::Vector3f>::const_iterator hull_it;
+
+  Eigen::Hyperplane<float, 3> hyperplane_a ((centroid_b - centroid_a).normalized (), centroid_a);
+  Eigen::Hyperplane<float, 3> hyperplane_b ((centroid_a - centroid_b).normalized (), centroid_b);
+
+  // gather relevant points for minimal distance check
+  std::vector<Eigen::Vector3f> check_set_a, check_set_b;
+  getPointsOnPositiveSideOfHyperplane (convex_hull_a, hyperplane_a, check_set_a);
+  getPointsOnPositiveSideOfHyperplane (convex_hull_b, hyperplane_b, check_set_b);
+
+  /*
+  std::cout << "check_set_b:" << std::endl;
+  for (size_t i = 0; i < check_set_b.size (); ++i)
+  {
+    std::cout << check_set_b[i][0] << ", " << check_set_b[i][1] << ", " << check_set_b[i][2] << std::endl;
+  }
+  */
+  float min_dist = std::numeric_limits<float>::max ();
+
+  // check the distances between all points in check_set_a and the line segments constructed by check_set_b
+  // since we don't modify the order of the points in the convex hulls all valid line segments should still
+  // be retained and one (artificial) new line segment with a (larger) distance should be added that we don't
+  // need to handle explicitly
+
+  hull_it = check_set_a.begin ();
+  std::vector<Eigen::Vector3f>::const_iterator segment_start_it, segment_end_it;
+  float curr_dist;
+  std::vector<Eigen::Vector3f>::const_iterator a, b, c;
+
+  //std::cout << red_start << "first segement start:\n " << *segment_start_it << std::endl;
+  //std::cout << "first segement end:\n " << *segment_end_it << red_end << std::endl;
+  while (hull_it != check_set_a.end ())
+  {
+    segment_start_it = check_set_b.begin ();
+    segment_end_it = --check_set_b.end ();
+    while (segment_start_it != check_set_b.end ())
+    {
+      curr_dist = lineSegmentToPointDistance (*segment_start_it, *segment_end_it, *hull_it);
+      if (curr_dist < min_dist)
+      {
+        min_dist = curr_dist;
+        a = segment_start_it;
+        b = segment_end_it;
+        c = hull_it;
+      }
+      segment_end_it = segment_start_it++;
+    }
+    hull_it++;
+  }
+  hull_it = check_set_b.begin ();
+  while (hull_it != check_set_b.end ())
+  {
+    segment_start_it = check_set_a.begin ();
+    segment_end_it = --check_set_a.end ();
+    while (segment_start_it != check_set_a.end ())
+    {
+      curr_dist = lineSegmentToPointDistance (*segment_start_it, *segment_end_it, *hull_it);
+      if (curr_dist < min_dist)
+      {
+        min_dist = curr_dist;
+        a = segment_start_it;
+        b = segment_end_it;
+        c = hull_it;
+      }
+      segment_end_it = segment_start_it++;
+    }
+    hull_it++;
+  }
+
+  std::cout << red_start << "segment_start: " << (*a)[0] << ", " << (*a)[1] << ", " << (*a)[2] << std::endl;
+  std::cout << "segment_end: " << (*b)[0] << ", " << (*b)[1] << ", " << (*b)[2] << std::endl;
+  std::cout << "query_point " << (*c)[0] << ", " << (*c)[1] << ", " << (*c)[2] << red_end << std::endl;
+
+  return min_dist;
+}
+
+bool
+convexHullDistBelowThreshold (const std::vector<Eigen::Vector3f> &convex_hull_a,
+    std::vector<Eigen::Vector3f> &convex_hull_b, float threshold)
+{
+  Eigen::Vector3f centroid_a = getCentroid (convex_hull_a);
+  Eigen::Vector3f centroid_b = getCentroid (convex_hull_b);
+
+  Eigen::Hyperplane<float, 3> hyperplane_a ((centroid_b - centroid_a).normalized (), centroid_a);
+  Eigen::Hyperplane<float, 3> hyperplane_b ((centroid_a - centroid_b).normalized (), centroid_b);
+
+  // gather relevant points for minimal distance check
+  std::vector<Eigen::Vector3f> check_set_a, check_set_b;
+  getPointsOnPositiveSideOfHyperplane (convex_hull_a, hyperplane_a, check_set_a);
+  getPointsOnPositiveSideOfHyperplane (convex_hull_b, hyperplane_b, check_set_b);
+
+  // start to iterator over check_set_a
+  std::vector<Eigen::Vector3f>::const_iterator hull_it, segment_start_it, segment_end_it;
+  hull_it = check_set_a.begin ();
+  while (hull_it != check_set_a.end ())
+  {
+    segment_start_it = check_set_b.begin ();
+    segment_end_it = --check_set_b.end ();
+    while (segment_start_it != check_set_b.end ())
+    {
+      if (lineSegmentToPointDistance (*segment_start_it, *segment_end_it, *hull_it) < threshold)
+        return true;
+      segment_end_it = segment_start_it++;
+    }
+    hull_it++;
+  }
+  hull_it = check_set_b.begin ();
+  while (hull_it != check_set_b.end ())
+  {
+    segment_start_it = check_set_a.begin ();
+    segment_end_it = --check_set_a.end ();
+    while (segment_start_it != check_set_a.end ())
+    {
+      if (lineSegmentToPointDistance (*segment_start_it, *segment_end_it, *hull_it) < threshold)
+        return true;
+      segment_end_it = segment_start_it++;
+    }
+    hull_it++;
+  }
+  return false;
+}
+
+Eigen::Vector3f getCentroid (const std::vector<Eigen::Vector3f> &vec)
+{
+  Eigen::Vector3f center = Eigen::Vector3f::Zero ();
+
+  std::vector<Eigen::Vector3f>::const_iterator vec_it;
+  vec_it = vec.begin ();
+  while (vec_it != vec.end ())
+  {
+    center += (*vec_it++);
+  }
+  center /= static_cast<float> (vec.size ());
+  return center;
+}
+
+void getPointsOnPositiveSideOfHyperplane (const std::vector<Eigen::Vector3f> &all_points,
+    const Eigen::Hyperplane<float, 3> &hyperplane, std::vector<Eigen::Vector3f> &points_on_pos_side)
+{
+  points_on_pos_side.clear ();
+  points_on_pos_side.reserve (all_points.size ());
+
+  std::vector<Eigen::Vector3f>::const_iterator point_it;
+  point_it = all_points.begin ();
+  while (point_it != all_points.end ())
+  {
+    if (hyperplane.signedDistance (*point_it) >= 0.0f)
+    {
+      points_on_pos_side.push_back (*point_it);
+    }
+    point_it++;
+  }
+}
+
 bool
 doConvexHulls2DIntersect (const std::vector<Eigen::Vector3f> &convex_hull_a,
     const std::vector<Eigen::Vector3f> &convex_hull_b)

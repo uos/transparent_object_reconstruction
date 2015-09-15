@@ -1065,6 +1065,76 @@ tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
 
 
 /**
+  * @brief Function to compute the minimal distance between two 2D convex hull polygons.
+  *
+  * Computes the minimal distance between 2 convex hulls given as vectors of type
+  * 'Eigen::Vector3f'. It is assumed that the entries in the vectors are ordered properly,
+  * i.e., that there is a line segment between consecutive point and between the first and
+  * the last point as well.
+  * While it is assumed that the convex hulls are 2D, they can be arbitrarily oriented in 3D
+  * space.
+  * Note: The function assumes that the convex hulls do not overlap and does in fact not
+  * test for this. If the hulls could overlap (and thus the distance between them should
+  * be 0) a initial check if any point of convex_hull_a lies inside convex_hull_b (or vice
+  * versa) should be performed first to test for overlapping. In general this function will
+  * not return the correct distance, i.e., 0 for overlapping convex hulls.
+  *
+  * @param[in] convex_hull_a The polygon describing the first convex hull polygon.
+  * @param[in] convex_hull_b The polygon describing the second convex hull polygon.
+  * @returns The minimal distance between convex_hull_a and convex_hull_b.
+  */
+float
+convexHullsMindDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
+    std::vector<Eigen::Vector3f> &convex_hull_b);
+
+/**
+  * @brief Function to check if the distance between two non-intersection 2D convex hulls
+  * is below the given threshold.
+  * Checks if the distance between 2 convex hulls given as vectors of type 'Eigen::Vector3f'
+  * is below the specified threshold. It is assumed that the entries in the vectors are
+  * ordered properly, i.e., that there is a line segment between consecutive point and
+  * between the first and the last point as well.
+  * While it is assumed that the convex hulls are 2D, they can be arbitrarily oriented in 3D
+  * space.
+  * Note: Threshold must be positive (unchecked) and the convex hulls should not overlap /
+  * intersect. Otherwise the behaviour is undefined.
+  *
+  * @param[in] convex_hull_a The polygon describing the first convex hull polygon.
+  * @param[in] convex_hull_b The polygon describing the second convex hull polygon.
+  * @param[in] threshold The specified distance threshold.
+  * @returns True if the distance is below the given threshold, false otherwise.
+  */
+
+bool
+convexHullDistBelowThreshold (const std::vector<Eigen::Vector3f> &convex_hull_a,
+    std::vector<Eigen::Vector3f> &convex_hull_b, float threshold);
+
+/**
+  * @brief: Convenience function to receive the center of gravity or centroid
+  * of a given vector of 'Eigen::vector3f'.
+  *
+  * @param[in] vec The vector of which the centroid is returned.
+  * @returns The centroid of the input vector
+  */
+Eigen::Vector3f getCentroid (const std::vector<Eigen::Vector3f> &vec);
+
+/**
+  * @brief: method to filter a vector of points, according to their position to a given
+  * hyperplane.
+  * All points in the vector, given by input argument 'all_points' are tested if they lie
+  * on the positive side of the given hyperplane (i.e., if the signed distance is larger than 0).
+  * All points for which this holds true are inserted into and returned via output argument
+  * 'points_on_pos_side'.
+  *
+  * @param[in] all_points The points that will be filtered
+  * @para,[in] hyperplane The hyperplane that is used as a filter criteria.
+  * @param[out] points_on_pos_side The points from 'all_points' that are on the positive
+  *   side of the hyperplane.
+  */
+void getPointsOnPositiveSideOfHyperplane (const std::vector<Eigen::Vector3f> &all_points,
+    const Eigen::Hyperplane<float, 3> &hyperplane, std::vector<Eigen::Vector3f> &points_on_pos_side);
+
+/**
   * @brief: Function to check if two 2D convex hulls intersect, i.e., if at least one point of
   * the first convex hull lies inside the second or vice versa.
   *
