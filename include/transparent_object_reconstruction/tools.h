@@ -69,6 +69,22 @@ const float MAX_CONC_HULL_CORR_DIST = 0.02f;
 const float CONCAVE_HULL_ALPHA = 0.005f;
 // TODO: end of blindly importet constants
 
+/**
+ * Convenience template method to convert the points in a given point cloud into a vector
+ * of 'Eigen::Vector3f' just representing the geometric properties of the point cloud.
+ */
+template <typename PointT> inline void
+convert (const typename pcl::PointCloud<PointT>::ConstPtr &cloud, std::vector<Eigen::Vector3f> &vec)
+{
+  vec.clear ();
+  vec.reserve (cloud->points.size ());
+  typename pcl::PointCloud<PointType>::VectorType::const_iterator p_it = cloud->points.begin ();
+  while (p_it != cloud->points.end ())
+  {
+    vec.push_back (Eigen::Vector3f (p_it->x, p_it->y, p_it->z));
+    p_it++;
+  }
+}
 
 /**
  * Function to retrieve the points of a point cloud that fall into each
@@ -288,13 +304,7 @@ template <typename PointT> inline bool
 pointInsideConvexPolygon (const typename pcl::PointCloud<PointT>::ConstPtr &polygon, PointT query_point)
 {
   std::vector<Eigen::Vector3f> p;
-  p.reserve (polygon->points.size ());
-  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it = polygon->points.begin ();
-  while (p_it != polygon->points.end ())
-  {
-    p.push_back (Eigen::Vector3f (p_it->x, p_it->y, p_it->z));
-    p_it++;
-  }
+  convert<PointT> (polygon, p);
   Eigen::Vector3f q (query_point.x, query_point.y, query_point.z);
 
   return pointInsideConvexPolygon (p, q);
