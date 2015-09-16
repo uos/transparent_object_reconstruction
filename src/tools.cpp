@@ -1786,7 +1786,7 @@ lineSegmentToPointDistance (const Eigen::Vector3f &segment_start, const Eigen::V
 }
 
 float
-convexHullsMindDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
+convexHullsMinDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
     std::vector<Eigen::Vector3f> &convex_hull_b)
 {
   // TODO: remove later

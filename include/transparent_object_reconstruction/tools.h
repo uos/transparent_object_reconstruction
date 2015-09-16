@@ -1084,7 +1084,7 @@ tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
   * @returns The minimal distance between convex_hull_a and convex_hull_b.
   */
 float
-convexHullsMindDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
+convexHullsMinDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
     std::vector<Eigen::Vector3f> &convex_hull_b);
 
 /**
