@@ -78,7 +78,7 @@ convert (const typename pcl::PointCloud<PointT>::ConstPtr &cloud, std::vector<Ei
 {
   vec.clear ();
   vec.reserve (cloud->points.size ());
-  typename pcl::PointCloud<PointType>::VectorType::const_iterator p_it = cloud->points.begin ();
+  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it = cloud->points.begin ();
   while (p_it != cloud->points.end ())
   {
     vec.push_back (Eigen::Vector3f (p_it->x, p_it->y, p_it->z));
@@ -101,7 +101,7 @@ convert (const typename pcl::PointCloud<PointT>::ConstPtr &cloud, std::vector<Ei
  **/
 void
 extractVoxelGridCellPoints (const CloudPtr &cloud,
-    pcl::VoxelGrid<PointType> &v_grid,
+    pcl::VoxelGrid<ColorPoint> &v_grid,
     size_t nr_filled_grid_cells,
     std::vector<Cloud::VectorType> &cell_points);
 
@@ -472,7 +472,7 @@ createHullLinesVec (CloudVector &hull_vector, CloudVector &hull_lines_vec,
  **/
 void
 createVoxelGrids (CloudVector &cloud_vector,
-    std::vector<pcl::VoxelGrid<PointType> > &v_grid_vector,
+    std::vector<pcl::VoxelGrid<ColorPoint> > &v_grid_vector,
     CloudVector &grid_clouds,
     float x_grid_size,
     float y_grid_size,

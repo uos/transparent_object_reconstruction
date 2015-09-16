@@ -60,7 +60,7 @@ hole_hull_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
     tmp_marker.color.b = b;
     h += color_increment;
 
-    if (tesselateConvexHull<PointType> (hull_cloud, tmp_marker))
+    if (tesselateConvexHull<ColorPoint> (hull_cloud, tmp_marker))
     {
       vis_pub.publish (tmp_marker);
     }

@@ -2,14 +2,14 @@
 
 template <>
 Eigen::Vector3f
-convert<Eigen::Vector3f, PointType> (const PointType &p)
+convert<Eigen::Vector3f, ColorPoint> (const ColorPoint &p)
 {
   return Eigen::Vector3f (p.x, p.y, p.z);
 }
 
 template <>
 Eigen::Vector4f
-convert<Eigen::Vector4f, PointType> (const PointType &p)
+convert<Eigen::Vector4f, ColorPoint> (const ColorPoint &p)
 {
   return Eigen::Vector4f (p.x, p.y, p.z, 0.0f);
 }
@@ -29,10 +29,10 @@ convert<Eigen::Vector4f, LabelPoint> (const LabelPoint &p)
 }
 
 template <>
-PointType
-convert<PointType, Eigen::Vector3f> (const Eigen::Vector3f &v)
+ColorPoint
+convert<ColorPoint, Eigen::Vector3f> (const Eigen::Vector3f &v)
 {
-  PointType p;
+  ColorPoint p;
   p.x = v[0];
   p.y = v[1];
   p.z = v[2];
@@ -40,10 +40,10 @@ convert<PointType, Eigen::Vector3f> (const Eigen::Vector3f &v)
 }
 
 template <>
-PointType
-convert<PointType, Eigen::Vector4f> (const Eigen::Vector4f &v)
+ColorPoint
+convert<ColorPoint, Eigen::Vector4f> (const Eigen::Vector4f &v)
 {
-  PointType p;
+  ColorPoint p;
   p.x = v[0];
   p.y = v[1];
   p.z = v[2];
@@ -111,7 +111,7 @@ convert<ModelPtr, Eigen::Vector4f> (const Eigen::Vector4f &v)
 }
 template <>
 void
-insert_coords<Eigen::Vector3f, PointType> (const Eigen::Vector3f &source, PointType &target)
+insert_coords<Eigen::Vector3f, ColorPoint> (const Eigen::Vector3f &source, ColorPoint &target)
 {
   target.x = source[0];
   target.y = source[1];
@@ -120,7 +120,7 @@ insert_coords<Eigen::Vector3f, PointType> (const Eigen::Vector3f &source, PointT
 
 template <>
 void
-insert_coords<Eigen::Vector4f, PointType> (const Eigen::Vector4f &source, PointType &target)
+insert_coords<Eigen::Vector4f, ColorPoint> (const Eigen::Vector4f &source, ColorPoint &target)
 {
   target.x = source[0];
   target.y = source[1];
@@ -147,7 +147,7 @@ insert_coords<Eigen::Vector4f, LabelPoint> (const Eigen::Vector4f &source, Label
 
 void
 extractVoxelGridCellPoints (const CloudPtr &cloud,
-    pcl::VoxelGrid<PointType> &v_grid,
+    pcl::VoxelGrid<ColorPoint> &v_grid,
     size_t nr_filled_grid_cells,
     std::vector<Cloud::VectorType> &cell_points)
 {
@@ -454,7 +454,7 @@ cropPlaneByPlanes (CloudPtr cropped_plane, const CloudVector &plane_vector,
   // reserve enough room in the cropped plane
   cropped_plane->points.clear ();
   cropped_plane->points.reserve (plane_vector[plane_index]->points.size ());
-  PointType p;
+  ColorPoint p;
   bool behind_any_plane;
   size_t nr_points = 0;
   for (size_t i = 0; i < plane_vector[plane_index]->points.size (); ++i)
@@ -503,7 +503,7 @@ cropPlaneByPlanes (CloudVector &plane_vector,
 {
   Cloud tmp_cloud;
   tmp_cloud.points.reserve (plane_vector[plane_index]->points.size ());
-  pcl::PointCloud<PointType>::iterator p = plane_vector[plane_index]->begin ();
+  pcl::PointCloud<ColorPoint>::iterator p = plane_vector[plane_index]->begin ();
   bool above_plane;
   size_t nr_points = 0;
   while (p != plane_vector[plane_index]->end ())
@@ -553,7 +553,7 @@ cropPointCloudByAllPlanes (CloudPtr cloud, const ModelVector &plane_coeff_vector
 
   size_t nr_points = 0;
   bool above_plane;
-  PointType point;
+  ColorPoint point;
   Cloud::iterator p = cloud->begin ();
   // check for every point in the pointcloud
   while (p != cloud->end ())
@@ -600,7 +600,7 @@ cropPointCloudByPlanes (CloudPtr cloud,
 
   size_t nr_points = 0;
   bool above_plane;
-  PointType point;
+  ColorPoint point;
   Cloud::iterator p = cloud->begin ();
   // check for every point in the pointcloud
   while (p != cloud->end ())
@@ -665,7 +665,7 @@ cropPointCloudBySpecifiedPlanes (CloudPtr cloud,
 
   size_t nr_points = 0;
   bool above_plane;
-  PointType point;
+  ColorPoint point;
   Cloud::iterator p = cloud->begin ();
   // check for every point in the pointcloud
   while (p != cloud->end ())
@@ -746,7 +746,7 @@ cropClusterHullByPlaneHull (Cloud::ConstPtr plane_convex_hull,
   filtered_cluster_hull.points.clear ();
   size_t nr_inliers = 0;
   filtered_cluster_hull.points.reserve (proj_cluster_hull->points.size ());
-  PointType query_point;
+  ColorPoint query_point;
   for (size_t i = 0; i < proj_cluster_hull->points.size (); ++i)
   {
     query_point = proj_cluster_hull->points[i];
@@ -830,7 +830,7 @@ refinePlanes (CloudVector &planes, ModelVector &plane_coefficients)
   float min_dist;
   size_t best_index;
   float dist;
-  PointType current_point;
+  ColorPoint current_point;
   Eigen::Vector3f p;
 
   // for all planes
@@ -874,7 +874,7 @@ projectCloudOnPlane (Cloud::ConstPtr input, CloudPtr projected_cloud, ModelPtr p
   // clear the points of projected cloud and reserve enough memory
   projected_cloud->points.clear ();
   projected_cloud->points.reserve (input->points.size ());
-  PointType intersection;
+  ColorPoint intersection;
   Eigen::Vector4f plane_coeff = Eigen::Vector4f (plane->values[0],
       plane->values[1], plane->values[2], plane->values[3]);
 
@@ -899,12 +899,12 @@ createEuclideanClusters (Cloud::ConstPtr input, CloudVector &output,
    double cluster_tolerance = CLUSTER_TOLERANCE)
 {
   // Creating the KdTree object for the search method of the extraction
-  pcl::search::KdTree<PointType>::Ptr tree (new pcl::search::KdTree<PointType>);
+  pcl::search::KdTree<ColorPoint>::Ptr tree (new pcl::search::KdTree<ColorPoint>);
   tree->setInputCloud (input);
   
   // set up the parameters for the euclidean clustering
   std::vector<pcl::PointIndices> cluster_indices;
-  pcl::EuclideanClusterExtraction<PointType> ec;
+  pcl::EuclideanClusterExtraction<ColorPoint> ec;
   ec.setClusterTolerance (cluster_tolerance);
   ec.setMinClusterSize (min_cluster_size);
   ec.setMaxClusterSize (max_cluster_size);
@@ -921,7 +921,7 @@ createEuclideanClusters (Cloud::ConstPtr input, CloudVector &output,
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin ();
       it != cluster_indices.end (); ++it)
   {
-    pcl::ExtractIndices<PointType> extract_object_indices;
+    pcl::ExtractIndices<ColorPoint> extract_object_indices;
     extract_object_indices.setInputCloud (input);
     extract_object_indices.setIndices (pcl::PointIndices::Ptr (new pcl::PointIndices(*it)));
     CloudPtr tmp (new Cloud);
@@ -935,7 +935,7 @@ void
 projectCloudToPlane (Cloud::ConstPtr input, CloudPtr projected_cloud,
     ModelPtr plane_coefficients)
 {
-  pcl::ProjectInliers<PointType> projection;
+  pcl::ProjectInliers<ColorPoint> projection;
   projection.setModelType (pcl::SACMODEL_PLANE);
   projection.setInputCloud (input);
   projection.setModelCoefficients (plane_coefficients);
@@ -949,7 +949,7 @@ createHullLines (CloudPtr hull, CloudPtr hull_lines, float step_length = 0.005f)
   hull_lines->points.clear ();
   // create variables for line computation
   Eigen::Vector3f line_start, line_end, line_direction, line_step;
-  PointType point_on_line;
+  ColorPoint point_on_line;
   float line_length;
   unsigned int nr_steps;
 
@@ -1016,7 +1016,7 @@ createHullLinesVec (CloudVector &hull_vector, CloudVector &hull_lines_vec,
 
 void
 createVoxelGrids (CloudVector &cloud_vector,
-    std::vector<pcl::VoxelGrid<PointType> > &v_grid_vector,
+    std::vector<pcl::VoxelGrid<ColorPoint> > &v_grid_vector,
     CloudVector &grid_clouds,
     float x_grid_size = 0.01f,
     float y_grid_size = 0.01f,
@@ -1047,7 +1047,7 @@ plane (Cloud::ConstPtr input, CloudPtr &non_planar_cloud,
   //ModelPtr coefficients (new Model);
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   // Create the segmentation object
-  pcl::SACSegmentation<PointType> seg;
+  pcl::SACSegmentation<ColorPoint> seg;
   // Optional
   seg.setOptimizeCoefficients (true);
   // Mandatory
@@ -1071,7 +1071,7 @@ plane (Cloud::ConstPtr input, CloudPtr &non_planar_cloud,
     return inliers->indices.size ();
   }
   
-  pcl::ExtractIndices<PointType> extract_object_indices;
+  pcl::ExtractIndices<ColorPoint> extract_object_indices;
   extract_object_indices.setNegative (true);
   extract_object_indices.setInputCloud (input);
   extract_object_indices.setIndices (inliers);
@@ -1094,7 +1094,7 @@ calcConvexHullsPerfectPlanes (CloudVector &perfect_planes_vector,
   conv_hulls.clear ();
   conv_hulls.resize (perfect_planes_vector.size ());
 
-  pcl::ConvexHull<PointType> conv_hull;
+  pcl::ConvexHull<ColorPoint> conv_hull;
   conv_hull.setDimension (2);
   // calculate the convex hull for every plane in plane_vector
   for (size_t i = 0; i < perfect_planes_vector.size (); ++i)
@@ -1169,7 +1169,7 @@ createConcaveHulls (CloudVector &object_clusters,
   }
 
   // create concave hull object
-  pcl::ConcaveHull<PointType> conc_hull;
+  pcl::ConcaveHull<ColorPoint> conc_hull;
   conc_hull.setAlpha (CONCAVE_HULL_ALPHA);
 
   // create the projected clusters
@@ -1291,11 +1291,11 @@ checkConcaveHullsNearestNeighbors (const CloudVector &planes,
       no_correspondences, scene_neighbors, complete_hulls);
 
   // create KdTrees of the planes for the nearest neighbor search
-  std::vector<pcl::KdTree<PointType>::Ptr> plane_KdTrees;
+  std::vector<pcl::KdTree<ColorPoint>::Ptr> plane_KdTrees;
   plane_KdTrees.reserve (planes.size ());
   for (size_t i = 0; i < planes.size (); ++i)
   {
-    pcl::KdTree<PointType>::Ptr tree (new pcl::KdTreeFLANN<PointType>);
+    pcl::KdTree<ColorPoint>::Ptr tree (new pcl::KdTreeFLANN<ColorPoint>);
     tree->setInputCloud (planes[i]);
     plane_KdTrees.push_back (tree);
   }
@@ -1306,7 +1306,7 @@ checkConcaveHullsNearestNeighbors (const CloudVector &planes,
   std::vector<float> k_sqr_dist;
   k_indices.resize (1);
   k_sqr_dist.resize (1);
-  PointType query_point;
+  ColorPoint query_point;
 
   for (size_t i = 0; i < planes.size (); ++i)
   {
@@ -1454,9 +1454,9 @@ removeOverlapBetweenConcaveHulls (std::vector<CloudVector> &projected_clusters,
       0.0f);
 
   std::list<size_t> intersection_indices;
-  std::vector<pcl::KdTree<PointType>::Ptr> projected_cluster_trees;
+  std::vector<pcl::KdTree<ColorPoint>::Ptr> projected_cluster_trees;
   // allocate variables needed for k-nearest neighbor search (k = 1)
-  PointType query_point;
+  ColorPoint query_point;
   std::vector<int> k_indices;
   std::vector<float> k_sqr_dists;
   k_indices.resize (1);
@@ -1526,8 +1526,8 @@ removeOverlapBetweenConcaveHulls (std::vector<CloudVector> &projected_clusters,
           {
             if (projected_cluster_trees[*it] == NULL)
             {
-              pcl::KdTree<PointType>::Ptr kd_tree
-                (new pcl::KdTreeFLANN<PointType>);
+              pcl::KdTree<ColorPoint>::Ptr kd_tree
+                (new pcl::KdTreeFLANN<ColorPoint>);
               kd_tree->setInputCloud (projected_clusters[i][*it]);
               projected_cluster_trees[*it] = kd_tree;
             }
