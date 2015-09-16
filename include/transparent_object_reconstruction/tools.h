@@ -428,7 +428,8 @@ projectCloudToPlane (Cloud::ConstPtr input, CloudPtr projected_cloud,
     ModelPtr plane_coefficients);
 
 /**
- * Method to create a point sampling of the border of a hull polygon.
+ * @brief: Templated method to create a point sampling of the border of a
+ * hull polygon.
  * The point cloud given by first argument 'hull' should contain the
  * vertices of a hull polygon. It is assumed that this polygon is closed,
  * i.e., the first and last point are also connected via a line segment.
@@ -440,8 +441,61 @@ projectCloudToPlane (Cloud::ConstPtr input, CloudPtr projected_cloud,
  *    the vertices of 'hull', also including the vertices themselves.
  * @param[in] step_length The step length of of the sampling
  **/
-void
-createHullLines (CloudPtr hull, CloudPtr hull_lines, float step_length);
+template <typename PointT> inline void
+createHullLines (const typename pcl::PointCloud<PointT>::Ptr &hull,
+    typename pcl::PointCloud<PointT>::Ptr hull_lines, float step_length)
+{
+  // remove any lingering content in the output
+  hull_lines->points.clear ();
+  // create variables for line computation
+  Eigen::Vector3f line_start, line_end, line_direction, line_step;
+  PointT point_on_line;
+  float line_length;
+  unsigned int nr_steps;
+
+  for (size_t point_index = 0; point_index < hull->points.size ();
+      ++point_index)
+  {
+    // set start and end point of current line segment
+    if (point_index == 0)
+    {
+      point_on_line = hull->points.back ();
+    }
+    else
+    {
+      point_on_line = hull->points[point_index - 1];
+    }
+    line_start = Eigen::Vector3f (point_on_line.x, point_on_line.y,
+        point_on_line.z);
+    point_on_line = hull->points[point_index];
+    line_end = Eigen::Vector3f (point_on_line.x, point_on_line.y,
+        point_on_line.z);
+    // determine direction, length and nr of steps
+    line_direction = line_end - line_start;
+    line_length = sqrt (line_direction.dot (line_direction));
+    line_direction.normalize ();
+    line_step = line_direction * step_length;
+    nr_steps = line_length / step_length;
+
+    // reserve additional space in the vector
+    hull_lines->points.reserve (hull_lines->points.size () + nr_steps + 1);
+
+    // add the sampled line segment
+    for (unsigned int step = 0; step < nr_steps; ++step)
+    {
+      line_start += line_step;
+      point_on_line.x = line_start[0];
+      point_on_line.y = line_start[1];
+      point_on_line.z = line_start[2];
+      hull_lines->push_back (point_on_line); // slightly inefficient
+    }
+    hull_lines->push_back (hull->points[0]);
+  }
+  // adapt cloud dimensions
+  hull_lines->width = hull_lines->points.size ();
+  hull_lines->height = 1;
+}
+
 
 /**
  * Method to create a line segment sampling for a collection of hull

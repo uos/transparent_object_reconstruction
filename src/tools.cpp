@@ -943,60 +943,6 @@ projectCloudToPlane (Cloud::ConstPtr input, CloudPtr projected_cloud,
 }
 
 void
-createHullLines (CloudPtr hull, CloudPtr hull_lines, float step_length = 0.005f)
-{
-  // remove any lingering content in the output
-  hull_lines->points.clear ();
-  // create variables for line computation
-  Eigen::Vector3f line_start, line_end, line_direction, line_step;
-  ColorPoint point_on_line;
-  float line_length;
-  unsigned int nr_steps;
-
-  for (size_t point_index = 0; point_index < hull->points.size ();
-      ++point_index)
-  {
-    // set start and end point of current line segment
-    if (point_index == 0)
-    {
-      point_on_line = hull->points.back ();
-    }
-    else
-    {
-      point_on_line = hull->points[point_index - 1];
-    }
-    line_start = Eigen::Vector3f (point_on_line.x, point_on_line.y,
-        point_on_line.z);
-    point_on_line = hull->points[point_index];
-    line_end = Eigen::Vector3f (point_on_line.x, point_on_line.y,
-        point_on_line.z);
-    // determine direction, length and nr of steps
-    line_direction = line_end - line_start;
-    line_length = sqrt (line_direction.dot (line_direction));
-    line_direction.normalize ();
-    line_step = line_direction * step_length;
-    nr_steps = line_length / step_length;
-
-    // reserve additional space in the vector
-    hull_lines->points.reserve (hull_lines->points.size () + nr_steps + 1);
-
-    // add the sampled line segment
-    for (unsigned int step = 0; step < nr_steps; ++step)
-    {
-      line_start += line_step;
-      point_on_line.x = line_start[0];
-      point_on_line.y = line_start[1];
-      point_on_line.z = line_start[2];
-      hull_lines->push_back (point_on_line); // slightly inefficient
-    }
-    hull_lines->push_back (hull->points[0]);
-  }
-  // adapt cloud dimensions
-  hull_lines->width = hull_lines->points.size ();
-  hull_lines->height = 1;
-}
-
-void
 createHullLinesVec (CloudVector &hull_vector, CloudVector &hull_lines_vec,
     float step_length = 0.005f)
 {
@@ -1008,7 +954,7 @@ createHullLinesVec (CloudVector &hull_vector, CloudVector &hull_lines_vec,
   while (current_hull != hull_vector.end ())
   {
     CloudPtr hull_lines (new Cloud);
-    createHullLines (*current_hull, hull_lines, step_length);
+    createHullLines<ColorPoint> (*current_hull, hull_lines, step_length);
     hull_lines_vec.push_back (hull_lines);
     current_hull++;
   }
