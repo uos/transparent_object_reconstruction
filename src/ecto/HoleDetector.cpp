@@ -127,6 +127,23 @@ struct HoleDetector
       }
     }
 
+  float holeBorderLowerBoundDist2 (const Eigen::Vector4f &min_bbox_a, const Eigen::Vector4f &max_bbox_a,
+      const Eigen::Vector4f &min_bbox_b, const Eigen::Vector4f &max_bbox_b)
+  {
+    Eigen::Vector3f min_dist = Eigen::Vector3f::Zero ();
+    for (size_t i = 0; i < 3; ++i)
+    {
+      if (max_bbox_b[i] < min_bbox_a[i])
+      {
+        min_dist[i] = min_bbox_a[i] - max_bbox_b[i];
+      }
+      else if (max_bbox_a[i] < min_bbox_b[i])
+      {
+        min_dist[i] = min_bbox_b[i] - max_bbox_a[i];
+      }
+    }
+    return min_dist.dot (min_dist);
+  }
 
   template <typename PointT>
     float holeBorderLowerBoundDist2 (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &hole_border_a,
@@ -136,21 +153,7 @@ struct HoleDetector
       ::pcl::getMinMax3D<PointT> (*hole_border_a, min_a, max_a);
       ::pcl::getMinMax3D<PointT> (*hole_border_b, min_b, max_b);
 
-      Eigen::Vector3f min_dist = Eigen::Vector3f::Zero ();
-      // determine minimal distance of bboxes in each dimension
-      for (size_t i = 0; i < 3; ++i)
-      {
-        if (max_b[i] < min_a[i])
-        {
-          min_dist[i] = min_a[i] - max_b[i];
-        }
-        else if (max_a[i] < min_b[i])
-        {
-          min_dist[i] = min_b[i] - max_a[i];
-        }
-      }
-
-      return min_dist.dot (min_dist);
+      return holeBorderLowerBoundDist2 (min_a, max_a, min_b, max_b);
     }
 
 
@@ -372,6 +375,139 @@ struct HoleDetector
       }
     }
 
+  template <typename PointT>
+    void mergeRemainingHulls (const std::vector<boost::shared_ptr<::pcl::PointCloud<PointT> > > &all_hulls,
+       const std::vector<std::vector<Eigen::Vector2i> > &remaining_hull_coords,
+       std::vector<boost::shared_ptr<::pcl::PointCloud<PointT> > > &fused_hull_clouds,
+       std::vector<std::vector<Eigen::Vector2i> > &hull_cluster_coords,
+       float max_fusion_dist)
+    {
+      // clear output argument
+      fused_hull_clouds.clear ();
+      hull_cluster_coords.clear ();
+
+      // compute bounding boxes for all borders
+      std::vector<Eigen::Vector4f> min_bboxes, max_bboxes;
+      min_bboxes.reserve (all_hulls.size ());
+      max_bboxes.reserve (all_hulls.size ());
+      Eigen::Vector4f min_bbox, max_bbox;
+      size_t total_hull_points = 0;
+      for (size_t i = 0; i < all_hulls.size (); ++i)
+      {
+        ::pcl::getMinMax3D<PointT> (*all_hulls[i], min_bbox, max_bbox);
+        min_bboxes.push_back (min_bbox);
+        max_bboxes.push_back (max_bbox);
+        total_hull_points += all_hulls[i]->points.size ();
+      }
+
+      float max_fusion_dist2 = max_fusion_dist * max_fusion_dist;
+      bool detected_set;
+      std::pair<std::set<size_t>::iterator, bool> insert_res;
+      std::vector<int> cluster_correspondence (all_hulls.size (), -1);
+
+      size_t nr_clusters = 0;
+      int next_cluster_nr = 0;
+      int c_index;
+      for (size_t i = 0; i < all_hulls.size (); ++i)
+      {
+        // retrieve the current hull
+        boost::shared_ptr<const ::pcl::PointCloud<PointT> > curr_hull = all_hulls[i];
+        // check if current hull isn't part of any cluster yet
+        if (cluster_correspondence[i] == -1)
+        {
+          cluster_correspondence[i] = next_cluster_nr++;
+          nr_clusters++;
+        }
+        c_index = cluster_correspondence[i];
+        for (size_t j = i + 1; j < all_hulls.size (); ++j)
+        {
+          // check if compared hull isn't already in the same cluster
+          if (c_index != cluster_correspondence[j])
+          {
+            // retrieve the hull to compare with
+            boost::shared_ptr<const ::pcl::PointCloud<PointT> > compare_hull = all_hulls[j];
+
+            // first check if bounding boxes are close enough (necessary criteria)
+            float bbox_dist = holeBorderLowerBoundDist2 (min_bboxes[i], max_bboxes[i],
+                min_bboxes[j], max_bboxes[j]);
+            if (max_fusion_dist2 > bbox_dist)
+            {
+              bool fuse = false;
+              // check if the hulls intersect
+              if (bbox_dist <= 2.0f * std::numeric_limits<float>::epsilon ())
+              {
+                // TODO: hulls could once all be converted to speed up doConvexHulls2DIntersect ()
+                fuse = doConvexHulls2DIntersect<PointT> (curr_hull, compare_hull);
+              }
+              if (!fuse)  // if hulls don't overlap, check if they are close enough
+              {
+                fuse =  convexHullDistBelowThreshold<PointT> (curr_hull, compare_hull, max_fusion_dist);
+              }
+              if (fuse) // intersect or close enough
+              {
+                // is the hull that is to be fused already part of another cluster?
+                if (cluster_correspondence[j] != -1)
+                {
+                  // add the current hull and all other hulls from the same cluster to the cluster of the compared hull
+                  int fusion_index = cluster_correspondence[j];
+                  for (size_t k = 0; k < cluster_correspondence.size (); ++k)
+                  {
+                    if (cluster_correspondence[k] == c_index)
+                    {
+                      cluster_correspondence[k] = fusion_index;
+                    }
+                  }
+                  c_index = fusion_index;
+                  nr_clusters--;
+                }
+                else
+                {
+                  // add compare hull to cluster of current hull
+                  cluster_correspondence[j] = c_index;
+                }
+              } // else: hulls are farther apart than threshold
+            } //  else: bounding boxes are farther apart than threshold
+          } // hulls are already in the same cluster
+        } // checked current hull against all other hulls for fusion - investigate next hull
+      }
+
+      // determine how many clusters exist
+      std::vector<int>::const_iterator c_index_it = cluster_correspondence.begin ();
+      std::set<int> cluster_nr_set;
+      while (c_index_it != cluster_correspondence.end ())
+      {
+        cluster_nr_set.insert (*c_index_it++);
+      }
+      fused_hull_clouds.reserve (cluster_nr_set.size ());
+      hull_cluster_coords.reserve (cluster_nr_set.size ());
+      std::set<int>::const_iterator set_it = cluster_nr_set.begin ();
+      // aggregate points and 2D coords of convex hulls in the same cluster
+      while (set_it != cluster_nr_set.end ())
+      {
+        auto current_hull_cluster = boost::make_shared<::pcl::PointCloud<PointT> > ();
+        std::vector<Eigen::Vector2i> current_hull_cluster_coords;
+        current_hull_cluster->points.reserve (total_hull_points);
+        current_hull_cluster_coords.reserve (total_hull_points);
+        size_t last_cluster_member_hull;
+        for (size_t i = 0; i < cluster_correspondence.size (); ++i)
+        {
+          if (cluster_correspondence[i] == *set_it)
+          {
+            current_hull_cluster->points.insert (current_hull_cluster->points.end (),
+                all_hulls[i]->points.begin (), all_hulls[i]->points.end ());
+            current_hull_cluster_coords.insert (current_hull_cluster_coords.end (),
+                remaining_hull_coords[i].begin (), remaining_hull_coords[i].end ());
+            last_cluster_member_hull = i;
+          }
+        }
+        // add aggregated points / 2D coords to output arguments
+        current_hull_cluster->header = all_hulls[last_cluster_member_hull]->header;
+        fused_hull_clouds.push_back (current_hull_cluster);
+        hull_cluster_coords.push_back (current_hull_cluster_coords);
+        set_it++;
+      }
+    }
+
   static void declare_params (tendrils& params)
   {
     params.declare<size_t> ("min_hole_size", "Minimal numbers of connected pixels in the depth image to form a hole", 15);
@@ -510,6 +646,12 @@ struct HoleDetector
         all_holes_it++;
         all_borders_it++;
       }
+
+      std::vector<boost::shared_ptr<::pcl::PointCloud<PointT> > > remaining_hulls;
+      std::vector<std::vector<Eigen::Vector2i> > remaining_hull_coords;
+      remaining_hulls.reserve (inside_borders.size () + overlap_borders.size ());
+      remaining_hull_coords.reserve (inside_borders.size () + overlap_borders.size ());
+
       // create array to store all non nan-points that are enclosed by the hole
       // and should be removed before clustering
       ::pcl::PointIndices::Ptr remove_indices (new ::pcl::PointIndices);
@@ -521,7 +663,7 @@ struct HoleDetector
       // create representations for the holes completely inside convex hull of table top
       auto holes_msg= boost::make_shared<transparent_object_reconstruction::Holes>();
       holes_msg->convex_hulls.reserve (inside_holes.size ());
-      for (size_t i = 0; i < inside_holes.size (); ++i)
+      for (size_t i = 0; i < inside_borders.size (); ++i)
       {
         auto border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
         border_cloud->header = input->header;
@@ -567,14 +709,14 @@ struct HoleDetector
         }
         // store indices of points that are inside the convex hull - these will be removed later
         bool touches_border;
-        addRemoveIndices (input, convex_hull_polygon, remove_indices, touches_border);
-
+        Eigen::Vector2i min_bbox, max_bbox;
+        // check if hole touches border
+        get2DHullBBox (input, convex_hull_polygon, min_bbox, max_bbox, touches_border);
         if (!touches_border)
         {
-          // add current hole to Hole message
-          sensor_msgs::PointCloud2 pc2;
-          pcl::toROSMsg (*conv_border_cloud, pc2);
-          holes_msg->convex_hulls.push_back (pc2);
+          remaining_hulls.push_back (conv_border_cloud);
+          remaining_hull_coords.push_back (convex_hull_polygon);
+
         }
         // else discard the hole
       }
@@ -697,18 +839,65 @@ struct HoleDetector
             }
             // store indices of points that are inside the convex hull - these will be removed later
             bool touches_border;
-            addRemoveIndices (input, convex_hull_polygon, remove_indices, touches_border);
-
+            Eigen::Vector2i min_bbox, max_bbox;
+            // check if hole touches border
+            get2DHullBBox (input, convex_hull_polygon, min_bbox, max_bbox, touches_border);
             if (!touches_border)
             {
-              // add current hole to Hole message
-              sensor_msgs::PointCloud2 pc2;
-              pcl::toROSMsg (*conv_border_cloud, pc2);
-              holes_msg->convex_hulls.push_back (pc2);
+              remaining_hulls.push_back (conv_border_cloud);
+              remaining_hull_coords.push_back (convex_hull_polygon);
             }
             // else discard the hole
           }
         }
+      }
+
+      // check if some the remaining holes should be merged depending on their distance
+      std::vector<boost::shared_ptr<::pcl::PointCloud<PointT> > > fused_hull_clouds;
+      std::vector<std::vector<Eigen::Vector2i> > hull_cluster_coords;
+      // fuse convex hulls that are close enough to each other
+      mergeRemainingHulls<PointT> (remaining_hulls, remaining_hull_coords,
+         fused_hull_clouds, hull_cluster_coords, 0.05f);
+
+      std::cout << "mergeRemainingHulls finished, fused_hull_clouds.size (): "
+        << fused_hull_clouds.size () << std::endl;
+
+
+      ::pcl::PointCloud<::pcl::PointXYZRGBL>::Ptr output_cloud (new ::pcl::PointCloud<::pcl::PointXYZRGBL>);
+
+      static size_t f_counter = 0;
+      ::pcl::PCDWriter test_writer;
+      for (size_t i = 0; i < fused_hull_clouds.size (); ++i)
+      {
+        // create a new cloud for the convex hull of a cloud cluster
+        auto hull_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
+        hull_cloud->header = fused_hull_clouds[i]->header;
+
+        // now do a convex hull computation
+        ::pcl::PointIndices convex_hull_indices;
+        ::pcl::ConvexHull<PointT> c_hull;
+        c_hull.setInputCloud (fused_hull_clouds[i]);
+        c_hull.setDimension (2);
+        c_hull.reconstruct (*hull_cloud);
+        c_hull.getHullPointIndices (convex_hull_indices);
+
+        // retrieve the 2D coordinates for the resulting hull
+        std::vector<int>::const_iterator c_index_it = convex_hull_indices.indices.begin ();
+        std::vector<Eigen::Vector2i> current_hull_coords;
+        current_hull_coords.reserve (convex_hull_indices.indices.size ());
+        while (c_index_it != convex_hull_indices.indices.end ())
+        {
+          current_hull_coords.push_back (hull_cluster_coords[i][*c_index_it++]);
+        }
+
+        // check if there are measurement points inside the current hull that should be removed
+        bool touches_border;
+        addRemoveIndices (input, current_hull_coords, remove_indices, touches_border);
+
+        // add to hole msgs
+        sensor_msgs::PointCloud2 pc2;
+        pcl::toROSMsg (*hull_cloud, pc2);
+        holes_msg->convex_hulls.push_back (pc2);
       }
 
       if (remove_indices->indices.size () > 1)
@@ -756,7 +945,7 @@ struct HoleDetector
   ecto::spore<float> plane_dist_threshold_;
   ecto::spore<float> min_distance_to_convex_hull_;
   ecto::spore<::pcl::PointIndices::ConstPtr> hull_indices_;
-  ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_; //TODO: is this what I get from the segmentation?
+  ecto::spore<::pcl::ModelCoefficients::ConstPtr> model_;
   ecto::spore<ecto::pcl::PointCloud> output_;
   ecto::spore<transparent_object_reconstruction::Holes::ConstPtr> holes_mgs_;
   ecto::spore<::pcl::PointIndices::ConstPtr> remove_indices_;
