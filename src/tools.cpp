@@ -1900,23 +1900,34 @@ bool
 doConvexHulls2DIntersect (const std::vector<Eigen::Vector3f> &convex_hull_a,
     const std::vector<Eigen::Vector3f> &convex_hull_b)
 {
+  Eigen::Vector3f centroid_a = getCentroid (convex_hull_a);
+  Eigen::Vector3f centroid_b = getCentroid (convex_hull_b);
+
+  Eigen::Hyperplane<float, 3> hyperplane_a ((centroid_b - centroid_a).normalized (), centroid_a);
+  Eigen::Hyperplane<float, 3> hyperplane_b ((centroid_a - centroid_b).normalized (), centroid_b);
+
+  // gather relevant points for minimal distance check
+  std::vector<Eigen::Vector3f> check_set_a, check_set_b;
+  getPointsOnPositiveSideOfHyperplane (convex_hull_a, hyperplane_a, check_set_a);
+  getPointsOnPositiveSideOfHyperplane (convex_hull_b, hyperplane_b, check_set_b);
+
+
   std::vector<Eigen::Vector3f>::const_iterator hull_it;
-  hull_it = convex_hull_a.begin ();
-  while (hull_it != convex_hull_a.end ())
+  hull_it = check_set_a.begin ();
+  while (hull_it != check_set_a.end ())
   {
     if (pointInsideConvexPolygon (convex_hull_b, *hull_it++))
     {
       return true;
     }
   }
-  hull_it  = convex_hull_b.begin ();
-  while (hull_it != convex_hull_b.end ())
+  hull_it  = check_set_b.begin ();
+  while (hull_it != check_set_b.end ())
   {
     if (pointInsideConvexPolygon (convex_hull_a, *hull_it++))
     {
       return true;
     }
   }
-
   return false;
 }

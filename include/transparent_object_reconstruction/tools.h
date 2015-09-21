@@ -1141,6 +1141,19 @@ float
 convexHullsMinDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
     std::vector<Eigen::Vector3f> &convex_hull_b);
 
+template <typename PointT> inline float
+convexHullsMinDistance (const typename pcl::PointCloud<PointT>::ConstPtr &convex_hull_a,
+   const typename pcl::PointCloud<PointT>::ConstPtr &convex_hull_b)
+{
+  std::vector<Eigen::Vector3f> c_hull_a;
+  std::vector<Eigen::Vector3f> c_hull_b;
+
+  convert<PointT> (convex_hull_a, c_hull_a);
+  convert<PointT> (convex_hull_b, c_hull_b);
+
+  return convexHullsMinDistance (c_hull_a, c_hull_b);
+}
+
 /**
   * @brief Function to check if the distance between two non-intersection 2D convex hulls
   * is below the given threshold.
@@ -1162,6 +1175,20 @@ convexHullsMinDistance (const std::vector<Eigen::Vector3f> &convex_hull_a,
 bool
 convexHullDistBelowThreshold (const std::vector<Eigen::Vector3f> &convex_hull_a,
     std::vector<Eigen::Vector3f> &convex_hull_b, float threshold);
+
+template <typename PointT> inline bool
+convexHullDistBelowThreshold (const typename pcl::PointCloud<PointT>::ConstPtr &convex_hull_a,
+   const typename pcl::PointCloud<PointT>::ConstPtr &convex_hull_b, float threshold)
+{
+  std::vector<Eigen::Vector3f> c_hull_a;
+  std::vector<Eigen::Vector3f> c_hull_b;
+
+  convert<PointT> (convex_hull_a, c_hull_a);
+  convert<PointT> (convex_hull_b, c_hull_b);
+
+  return convexHullDistBelowThreshold (c_hull_a, c_hull_b, threshold);
+}
+
 
 /**
   * @brief: Convenience function to receive the center of gravity or centroid
