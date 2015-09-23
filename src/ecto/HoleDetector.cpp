@@ -27,6 +27,16 @@
 #include<transparent_object_reconstruction/Holes.h>
 #include<transparent_object_reconstruction/tools.h>
 
+
+struct Vector2iComp {
+    bool operator() (const Eigen::Vector2i &lhs, const Eigen::Vector2i &rhs) const
+    {
+      if (lhs[0] != rhs[0])
+        return lhs[0] < rhs[0];
+      return lhs[1] < rhs[1];
+    }
+};
+
 struct HoleDetector
 {
   static void calcPlaneTransformation (Eigen::Vector3f plane_normal,
@@ -70,6 +80,77 @@ struct HoleDetector
     }
     ::pcl::getTransformationFromTwoUnitVectorsAndOrigin (ortho_to_normal,
         plane_normal, origin, transformation);
+  }
+
+  template <typename PointT>
+    bool validPoint (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
+        const Eigen::Vector2i &coords)
+    {
+      if (coords[0] >= 0 && coords[1] >= 0 && coords[0] < cloud->width && coords[1] < cloud->height)
+      {
+        if (::pcl::isFinite<PointT> (cloud->at (coords[0], coords[1])))
+          return true;
+      }
+      return false;
+    }
+
+  /**
+    * @brief: Erodes a given border.
+    * The 2D border coordinates are smeared into x-y direction by the specified erode size.
+    * In the returned boorder coordinates, each coordinate is included only once.
+    *
+    * @param[in] input_cloud The complete point cloud
+    * @param[in,out] border_coords The 2D coordinates of the border of the hole
+    * @param[out] border_cloud The 3D points corresponding to the border of the hole
+    * @param[in] erode_size The number of coordinates to extend the border
+    */
+  template <typename PointT>
+  void erodeBorder (boost::shared_ptr<const ::pcl::PointCloud<PointT> > &input_cloud,
+      std::vector<Eigen::Vector2i> &border_coords,
+      boost::shared_ptr<::pcl::PointCloud<PointT> > &border_cloud,
+      size_t erode_size)
+  {
+    // clear / prepare outputs
+    border_cloud->points.clear ();
+    std::vector<Eigen::Vector2i> tmp_coords;
+
+    Eigen::Vector2i tmp;
+    Eigen::Vector2i x_shift (1, 0);
+    Eigen::Vector2i y_shift = Eigen::Vector2i (0, 1);
+    std::pair<std::set<Eigen::Vector2i, Vector2iComp>::iterator, bool> insert_res;
+    std::set<Eigen::Vector2i, Vector2iComp> extended_border_coord_set;
+    std::set<Eigen::Vector2i, Vector2iComp>::const_iterator set_it;
+    std::vector<Eigen::Vector2i>::const_iterator c_it = border_coords.begin ();
+
+    // do the erosion, but only add  coords that are valid and only add them once
+    while (c_it != border_coords.end ())
+    {
+      extended_border_coord_set.insert (*c_it);
+      for (size_t i = 1; i <= erode_size; ++i)
+      {
+        if (validPoint (input_cloud, (*c_it) + (i * x_shift)))
+          extended_border_coord_set.insert ((*c_it) + (i * x_shift));
+        if (validPoint (input_cloud, (*c_it) - (i * x_shift)))
+          extended_border_coord_set.insert ((*c_it) - (i * x_shift));
+        if (validPoint (input_cloud, (*c_it) + (i * y_shift)))
+          extended_border_coord_set.insert ((*c_it) + (i * y_shift));
+        if (validPoint (input_cloud, (*c_it) - (i * y_shift)))
+          extended_border_coord_set.insert ((*c_it) - (i * y_shift));
+      }
+      c_it++;
+    }
+    border_cloud->points.reserve (extended_border_coord_set.size ());
+    tmp_coords.reserve (extended_border_coord_set.size ());
+    set_it = extended_border_coord_set.begin ();
+    while (set_it != extended_border_coord_set.end ())
+    {
+      border_cloud->points.push_back (input_cloud->at ((*set_it)[0], (*set_it)[1]));
+      tmp_coords.push_back (*set_it++);
+    }
+    border_cloud->header = input_cloud->header;
+    border_cloud->width = border_cloud->points.size ();
+    border_cloud->height = 1;
+    border_coords.swap (tmp_coords);  // put the new coordinates into output argument
   }
 
   template <typename PointT>
