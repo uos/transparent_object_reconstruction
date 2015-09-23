@@ -1931,3 +1931,38 @@ doConvexHulls2DIntersect (const std::vector<Eigen::Vector3f> &convex_hull_a,
   }
   return false;
 }
+
+void
+getBBox (const std::vector<Eigen::Vector2i> &border, Eigen::Vector2i &min_bbox, Eigen::Vector2i &max_bbox)
+{
+  min_bbox[0] = min_bbox[1] = std::numeric_limits<int>::max ();
+  max_bbox[0] = max_bbox[1] = std::numeric_limits<int>::min ();
+
+  //std::cout << "initial min: " << min_bbox[0] << ", " << min_bbox[1] << std::endl;
+  //std::cout << "initial max: " << max_bbox[0] << ", " << max_bbox[1] << std::endl;
+
+  std::vector<Eigen::Vector2i>::const_iterator b_it = border.begin ();
+  while (b_it != border.end ())
+  {
+    //std::cout << "\t\t" << (*b_it)[0] << ", " << (*b_it)[1] << std::endl;
+    if ((*b_it)[0] < min_bbox[0])
+    {
+      min_bbox[0] = (*b_it)[0];
+    }
+    if ((*b_it)[1] < min_bbox[1])
+    {
+      min_bbox[1] = (*b_it)[1];
+    }
+    if ((*b_it)[0] > max_bbox[0])
+    {
+      max_bbox[0] = (*b_it)[0];
+    }
+    if ((*b_it)[1] > max_bbox[1])
+    {
+      max_bbox[1] = (*b_it)[1];
+    }
+    b_it++;
+  }
+  //std::cout << "final min: " << min_bbox[0] << ", " << min_bbox[1] << std::endl;
+  //std::cout << "final max: " << max_bbox[0] << ", " << max_bbox[1] << std::endl;
+}

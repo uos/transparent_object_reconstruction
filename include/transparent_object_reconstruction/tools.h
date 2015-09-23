@@ -849,6 +849,41 @@ projectPointOnPlane (const PointT &point, PointT &projected_point, const Eigen::
 }
 
 /**
+  * @brief: Method to project a complete onto a given plane.
+  * Points are projected perspectively, assuming the observer at the origin,
+  * i.e., at (0,0,0). Uses 'projectPointOnPlane ()' to project the individual
+  * points.
+  * @param[in] input The point cloud that is projected onto the given plane.
+  * @param[in] plane The plane coefficients as an Eigen::Vector4f.
+  * @param[out] output The projected point cloud.
+  * @param[in] angle_eps Threshold to determine if a point can't be projected
+  *   into the plane, because the vector from origin to point doesn't intersect
+  *   the plane.
+  */
+template <typename PointT> inline void
+projectPointCloudOnPlane (const typename pcl::PointCloud<PointT>::Ptr &input,
+    const Eigen::Vector4f &plane, typename pcl::PointCloud<PointT>::Ptr &output,
+    double angle_eps = LINE_PLANE_ANGLE_EPS)
+{
+  output->points.clear ();
+  output->points.reserve (input->points.size ());
+
+  PointT projected_point;
+  typename pcl::PointCloud<PointT>::VectorType::const_iterator p_it;
+  p_it = input->points.begin ();
+  while (p_it != input->points.end ())
+  {
+    if (projectPointOnPlane<PointT> (*p_it++, projected_point, plane, angle_eps))
+    {
+      output->points.push_back (projected_point);
+    }
+  }
+  output->width = output->points.size ();
+  output->height = 1;
+  output->header = input->header;
+}
+
+/**
 * @brief: Method to convert a HSV color value to a RGB triple.
 * It is assumed that saturation and value are both 1.0f, so only bright
 * and full colors will be returned.
@@ -1257,5 +1292,16 @@ doConvexHulls2DIntersect (const typename pcl::PointCloud<PointT>::ConstPtr &conv
 
   return doConvexHulls2DIntersect (c_hull_a, c_hull_b);
 }
+
+/**
+  * @brief: Method to retrieve the axis aligned bounding box of a given
+  * collection 2D coordinates.
+  *
+  * @param[in] border The collection of 2D coordinates
+  * @param[out] min_bbox The minimal corner of the 2D coordinate border
+  * @param[out] max_bbox The maximal corner of the 2D coordinate border
+  */
+void
+getBBox (const std::vector<Eigen::Vector2i> &border, Eigen::Vector2i &min_bbox, Eigen::Vector2i &max_bbox);
 
 #endif // TRANSP_OBJ_RECON_TOOLS
