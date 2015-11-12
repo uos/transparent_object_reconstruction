@@ -918,10 +918,6 @@ struct HoleDetector
       mergeRemainingHulls<PointT> (remaining_hulls, remaining_hull_coords,
          fused_hull_clouds, hull_cluster_coords, 0.05f);
 
-      std::cout << "mergeRemainingHulls finished, fused_hull_clouds.size (): "
-        << fused_hull_clouds.size () << std::endl;
-
-
       ::pcl::PointCloud<::pcl::PointXYZRGBL>::Ptr output_cloud (new ::pcl::PointCloud<::pcl::PointXYZRGBL>);
 
       static size_t f_counter = 0;
