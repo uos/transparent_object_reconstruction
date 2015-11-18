@@ -2,6 +2,9 @@
 #include <ecto_pcl/pcl_cell.hpp>
 
 #include <sensor_msgs/PointCloud2.h>
+
+#include <ros/console.h>
+
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 
@@ -919,6 +922,7 @@ struct HoleDetector
          fused_hull_clouds, hull_cluster_coords, 0.05f);
 
       ::pcl::PointCloud<::pcl::PointXYZRGBL>::Ptr output_cloud (new ::pcl::PointCloud<::pcl::PointXYZRGBL>);
+      ROS_DEBUG_STREAM_NAMED("HoleDetector", "mergeRemainingHulls finished, fused_hull_clouds.size (): " << fused_hull_clouds.size ());
 
       static size_t f_counter = 0;
       ::pcl::PCDWriter test_writer;
