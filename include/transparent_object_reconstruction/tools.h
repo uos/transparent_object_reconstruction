@@ -1304,4 +1304,131 @@ doConvexHulls2DIntersect (const typename pcl::PointCloud<PointT>::ConstPtr &conv
 void
 getBBox (const std::vector<Eigen::Vector2i> &border, Eigen::Vector2i &min_bbox, Eigen::Vector2i &max_bbox);
 
+
+/**
+  * @brief: small helper method, used by storeCloudAsColorImage ().
+  */
+void
+storeAsImage (const std::vector<std::vector<Eigen::Vector3i> > &img_data, const std::string &filename);
+
+/**
+  * @brief: Templated method to store a given organized pointcloud as an easily
+  * debug-able image.
+  *
+  * Stores a given point cloud into a 'ppm' image. 'ppm' images are easily
+  * readable, since they contain three integer values for each pixel. If the
+  * provided point cloud doesn't contain color information, the output image
+  * is undefined.
+  *
+  * @param[in] cloud The cloud that will be stored as a color image
+  * @param[in] base_filename The base filename (without the file extension)
+  */
+template <typename PointT> inline void
+storeCloudAsColorImage (const typename pcl::PointCloud<PointT>::ConstPtr &cloud,
+    const std::string &base_filename)
+{
+  if (!cloud->isOrganized ())
+  {
+    std::cerr << "storeCloudAsColorImage(): given cloud not organized, aborting!" << std::endl;
+    return;
+  }
+  CloudPtr color_cloud (new Cloud);
+  pcl::copyPointCloud (*cloud, *color_cloud);
+
+  std::vector<std::vector<Eigen::Vector3i> > color_data (color_cloud->width,
+      std::vector<Eigen::Vector3i> (color_cloud->height, Eigen::Vector3i::Zero ()));
+  ColorPoint tmp_point;
+
+  for (size_t u = 0; u < color_cloud->width; ++u)
+  {
+    for (size_t v = 0; v < color_cloud->height; ++v)
+    {
+      tmp_point = color_cloud->at (u, v);
+      color_data[u][v][0] = tmp_point.r;
+      color_data[u][v][1] = tmp_point.g;
+      color_data[u][v][2] = tmp_point.b;
+    }
+  }
+
+  std::string filename = base_filename + ".ppm";
+  storeAsImage (color_data, filename);
+}
+
+/**
+  * @brief: Templated method to store a given organized pointcloud as an easily
+  * debug-able depth image
+  *
+  * Stores a given point cloud into a 'pgm' image. 'pgm' images are easily
+  * readable, since they contain one integer value for each pixel.
+  * In a first pass the maximal distance of a measurement point is established.
+  * This point will obtain a value of 255 in the resulting depth image (i.e.
+  * white), while all other points will be assigned a value in relation to the
+  * maximal distance (between 0 and 255). NaN-measurements will be associated
+  * with a value of 0.
+  *
+  * @param[in] cloud The cloud that will be stored as a color image
+  * @param[in] base_filename The base filename (without the file extension)
+  */
+template <typename PointT> inline void
+storeCloudAsDepthImage (const typename pcl::PointCloud<PointT>::ConstPtr &cloud,
+    const std::string &base_filename)
+{
+  if (!cloud->isOrganized ())
+  {
+    std::cerr << "storeCloudAsDepthImage (): given cloud not organized, aborting!" << std::endl;
+    return;
+  }
+
+  std::vector<std::vector<int> > data (cloud->width, std::vector<int> (cloud->height, 0));
+  std::vector<std::vector<float> > dists (cloud->width, std::vector<float> (cloud->height, 0.0f));
+  float max_dist = 0.0f;
+  float curr_dist;
+  PointT tmp;
+
+  for (size_t u = 0; u < cloud->width; ++u)
+  {
+    for (size_t v = 0; v < cloud->height; ++v)
+    {
+      tmp = cloud->at (u, v);
+      if (pcl::isFinite (tmp))
+      {
+        curr_dist = sqrt ((tmp.x * tmp.x) + (tmp.y * tmp.y) + (tmp.z * tmp.z));
+        dists[u][v] = curr_dist;
+        if (curr_dist > max_dist)
+        {
+          max_dist = curr_dist;
+        }
+      }
+      else
+      {
+        curr_dist = 0.0f;
+      }
+    }
+  }
+
+  for (size_t u = 0; u < dists.size (); ++u)
+  {
+    for (size_t v = 0; v < dists[0].size (); ++v)
+    {
+      data[u][v] = static_cast<int>(dists[u][v] / max_dist * 255.0);
+    }
+  }
+
+  std::string filename = base_filename + ".pgm";
+  std::ofstream img_file (filename.c_str ());
+  img_file << "P2\n" << "# point cloud interpreted as depth image\n" << data.size () << " "
+        << data[0].size () << "\n255" << std::endl;
+
+  for (size_t v = 0; v < data[0].size (); ++v)
+  {
+    for (size_t u = 0; u < data.size (); ++u)
+    {
+      img_file << " " << data[u][v];
+    }
+    img_file << " " << std::endl;
+  }
+  img_file.flush ();
+  img_file.close ();
+}
+
 #endif // TRANSP_OBJ_RECON_TOOLS

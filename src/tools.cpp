@@ -1966,3 +1966,27 @@ getBBox (const std::vector<Eigen::Vector2i> &border, Eigen::Vector2i &min_bbox, 
   //std::cout << "final min: " << min_bbox[0] << ", " << min_bbox[1] << std::endl;
   //std::cout << "final max: " << max_bbox[0] << ", " << max_bbox[1] << std::endl;
 }
+
+// TODO: optional argument to change description comment in image header, if set
+void storeAsImage (const std::vector<std::vector<Eigen::Vector3i> > &img_data, const std::string &filename)
+{
+  if (img_data.size () == 0)
+  {
+    std::cerr << "storeAsImage was provided with empty data; Exiting" << std::endl;
+    return;
+  }
+
+  std::ofstream img_file (filename.c_str ());
+  img_file << "P3\n" << "# general ppm image\n" << img_data.size () << " "
+        << img_data[0].size () << "\n255" << std::endl;
+
+  for (size_t v = 0; v < img_data[0].size (); ++v)
+  {
+    for (size_t u = 0; u < img_data.size (); ++u)
+    {
+      img_file << img_data[u][v][0] << " " << img_data[u][v][1] << " " << img_data[u][v][2] << std::endl;
+    }
+  }
+  img_file.flush ();
+  img_file.close ();
+}
