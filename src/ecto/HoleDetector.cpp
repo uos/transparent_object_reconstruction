@@ -26,6 +26,9 @@
 #include <Eigen/Dense>
 
 #include <limits>
+#include <vector>
+#include <queue>
+#include <set>
 
 #include<transparent_object_reconstruction/Holes.h>
 #include<transparent_object_reconstruction/tools.h>
@@ -374,6 +377,156 @@ struct HoleDetector
       recursiveNANGrowing (cloud, column, row + 1, hole_2Dcoords, border_2Dcoords, visited);
     }
 
+
+  template <typename PointT>
+    static void iterativeNANGrowing (
+        boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
+        const std::vector<Eigen::Vector2i> &hull_2Dcoords,
+        const Eigen::Vector2i &table_min,
+        const Eigen::Vector2i &table_max,
+        std::vector<std::vector<Eigen::Vector2i> > &hole_2Dcoords,
+        std::vector<std::vector<Eigen::Vector2i> > &all_border_2Dcoords)
+    {
+      // iterative version of the recursive NAN-growing that can segfault, due to recursion depth...
+      // clear output arguments
+      hole_2Dcoords.clear ();
+      all_border_2Dcoords.clear ();
+
+      std::vector<std::set<Eigen::Vector2i, Vector2iComp>  > border_2Dcoords;
+      std::pair<std::set<Eigen::Vector2i, Vector2iComp>::iterator, bool> ret_val;
+
+      // create the inserted list locally
+      std::vector<std::vector<bool> > inserted (cloud->width, std::vector<bool> (cloud->height, false));
+      std::queue<Eigen::Vector2i> expansion_queue;
+
+      // iterate over the bounding box of the table and check for seeds of nan regions
+      for (int u = table_min[0]; u <= table_max[0]; ++u)
+      {
+        for (int v = table_min[1]; v <= table_max[1]; ++v)
+        {
+          if (!inserted[u][v] &&                                            // already used?
+              !(::pcl::isFinite (cloud->at (u, v))) &&                      // nan point?
+              pointInPolygon2D (hull_2Dcoords, Eigen::Vector2i (u, v)))     // inside hull?
+          {
+            std::vector<Eigen::Vector2i> current_hole;
+            std::set<Eigen::Vector2i, Vector2iComp> current_border;
+
+            // insert into expansion queue and mark as inserted
+            expansion_queue.push (Eigen::Vector2i (u, v));
+            inserted[u][v] = true;
+            while (!expansion_queue.empty ())
+            {
+              // take the first element and remove it from the queue
+              Eigen::Vector2i current_coordinate = expansion_queue.front ();
+              expansion_queue.pop ();
+
+              current_hole.push_back (current_coordinate);
+              // generate potential neighbors;
+              std::vector<Eigen::Vector2i> neighbors (4, current_coordinate);
+              neighbors[0][0] -= 1;
+              neighbors[1][0] += 1;
+              neighbors[2][1] -= 1;
+              neighbors[3][1] += 1;
+
+              for (size_t i = 0; i < neighbors.size (); ++i)
+              {
+                Eigen::Vector2i neighbor = neighbors[i];
+                // TODO: use this place to mark region as touching border?
+                if ((neighbor[0] >= 0) && (neighbor[0] < cloud->width) &&
+                    (neighbor[1] >= 0) && (neighbor[1] < cloud->height))
+                {
+                  if (::pcl::isFinite (cloud->at (neighbor[0], neighbor[1])))
+                  {
+                    // note that a border is not set as inserted
+                    // since it could potentially be border of 2 neighboring regions
+                    current_border.insert (neighbor);
+                  }
+                  else
+                  {
+                    if (!inserted[neighbor[0]][neighbor[1]])
+                    {
+                      // add nan coordinate to the queue and mark as inserted
+                      expansion_queue.push (neighbor);
+                      inserted[neighbor[0]][neighbor[1]] = true;
+                    }
+                  }
+                }
+              }
+            }
+
+            // check if the current region shares a border with a different region
+            std::list<size_t> shared_border_indices;
+            for (size_t i = 0; i < border_2Dcoords.size (); ++i)
+            {
+              std::set<Eigen::Vector2i, Vector2iComp>::const_iterator border_it = current_border.begin ();
+              while (border_it != current_border.end ())
+              {
+                if (border_2Dcoords[i].find (*border_it) != border_2Dcoords[i].end ())
+                {
+                  shared_border_indices.push_back (i);
+                  break;
+                }
+                border_it++;
+              }
+            }
+
+            // new region doesn't border any other region
+            if (shared_border_indices.size () == 0)
+            {
+              // here we need to copy / extract the current hole and border to the output arguments
+              hole_2Dcoords.push_back (current_hole);
+              border_2Dcoords.push_back (current_border);
+            }
+            else
+            {
+              // add current region to first neighbor
+              std::list<size_t>::const_iterator growing_region = shared_border_indices.begin ();
+              border_2Dcoords[*growing_region].insert (current_border.begin (), current_border.end ());
+              hole_2Dcoords[*growing_region].insert (hole_2Dcoords[*growing_region].end (),
+                  current_hole.begin (), current_hole.end ());
+              // multiple bordering regions
+              if (shared_border_indices.size () > 1)
+              {
+                std::list<size_t>::const_iterator index_it = shared_border_indices.begin ();
+                index_it++;
+                // now add all other regions that share a border with the new region
+                while (index_it != shared_border_indices.end ())
+                {
+                  border_2Dcoords[*growing_region].insert (border_2Dcoords[*index_it].begin (), border_2Dcoords[*index_it].end ());
+                  hole_2Dcoords[*growing_region].insert (hole_2Dcoords[*growing_region].end (),
+                      hole_2Dcoords[*index_it].begin (), hole_2Dcoords[*index_it].end ());
+                  index_it++;
+                }
+                // delete merged region (starting with the last one, so that indices / iterators still fit)
+                index_it--; // index_it points to the last (valid) element in shared_border_indices
+                while (index_it != growing_region)
+                {
+                  std::vector<std::vector<Eigen::Vector2i> >::iterator hole_del_it = hole_2Dcoords.begin ();
+                  std::vector<std::set<Eigen::Vector2i, Vector2iComp> >::iterator border_del_it = border_2Dcoords.begin ();
+                  for (size_t i = 0; i < *index_it; ++i)
+                  {
+                    hole_del_it++;
+                    border_del_it++;
+                  }
+                  hole_2Dcoords.erase (hole_del_it);
+                  border_2Dcoords.erase (border_del_it);
+                  index_it--;
+                }
+              }
+            }
+          }
+        }
+      }
+      // convert the border sets into vectors for output argument
+      all_border_2Dcoords.resize (border_2Dcoords.size ());
+      for (size_t i = 0; i < border_2Dcoords.size (); ++ i)
+      {
+        all_border_2Dcoords[i].insert (all_border_2Dcoords[i].end (),
+            border_2Dcoords[i].begin (), border_2Dcoords[i].end ());
+      }
+    }
+
+
   template <typename PointT>
     static bool convertIndexTo2DCoords (
         boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
@@ -691,6 +844,12 @@ struct HoleDetector
 
       std::vector<std::vector<bool> > visited (input->width, std::vector<bool> (input->height, false));
 
+      // iterative region growing
+      iterativeNANGrowing (input, hull_2Dcoords, table_min, table_max,
+          all_hole_2Dcoords, all_border_2Dcoords);
+      std::cout << "finished iterativeNANGrowing () call" << std::endl;
+
+      /*
       for (int u = table_min[0]; u < table_max[0]; ++u)
       {
         for (int v = table_min[1]; v < table_max[1]; ++v)
@@ -710,6 +869,7 @@ struct HoleDetector
           }
         }
       }
+      */
 
       // collected all nan-regions that contain at least 1 nan-pixel inside the convex hull of the table
       std::vector<std::vector<Eigen::Vector2i> >::const_iterator all_holes_it;
