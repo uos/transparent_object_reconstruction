@@ -392,12 +392,19 @@ struct HoleDetector
       hole_2Dcoords.clear ();
       all_border_2Dcoords.clear ();
 
-      std::vector<std::set<Eigen::Vector2i, Vector2iComp>  > border_2Dcoords;
-      std::pair<std::set<Eigen::Vector2i, Vector2iComp>::iterator, bool> ret_val;
+      // TODO: probably these should not be local variables, but also used as output arguments...
+      // use local lists to simplify / speed up deletion of regions during merging
+      std::list<std::set<Eigen::Vector2i, Vector2iComp> > borders_list;
+      std::list<std::vector<Eigen::Vector2i> > holes_list;
 
       // create the inserted list locally
       std::vector<std::vector<bool> > inserted (cloud->width, std::vector<bool> (cloud->height, false));
       std::queue<Eigen::Vector2i> expansion_queue;
+
+      // needed iterators
+      std::list<std::set<Eigen::Vector2i, Vector2iComp> >::iterator border_list_it;
+      std::list<std::vector<Eigen::Vector2i> >::iterator hole_list_it;
+
 
       // iterate over the bounding box of the table and check for seeds of nan regions
       for (int u = table_min[0]; u <= table_max[0]; ++u)
@@ -454,75 +461,93 @@ struct HoleDetector
               }
             }
 
-            // check if the current region shares a border with a different region
-            std::list<size_t> shared_border_indices;
-            for (size_t i = 0; i < border_2Dcoords.size (); ++i)
+            // check if the current region shares a border with an already existing region
+            std::list<std::list<std::set<Eigen::Vector2i, Vector2iComp> >::iterator> shared_border_list;
+            std::list<std::list<std::vector<Eigen::Vector2i> >::iterator> shared_hole_list;
+
+            border_list_it = borders_list.begin ();
+            hole_list_it = holes_list.begin ();
+
+            while (border_list_it != borders_list.end ())
             {
               std::set<Eigen::Vector2i, Vector2iComp>::const_iterator border_it = current_border.begin ();
               while (border_it != current_border.end ())
               {
-                if (border_2Dcoords[i].find (*border_it) != border_2Dcoords[i].end ())
+                if (border_list_it->find (*border_it) != border_list_it->end ())
                 {
-                  shared_border_indices.push_back (i);
-                  break;
+                  // add iterators at the front of the list with shared regions / border
+                  shared_border_list.push_front (border_list_it);
+                  shared_hole_list.push_front (hole_list_it);
+                  break;  // we already know border is shared - no need to check further
                 }
                 border_it++;
               }
+              border_list_it++;
+              hole_list_it++;
             }
 
             // new region doesn't border any other region
-            if (shared_border_indices.size () == 0)
+            if (shared_border_list.size () == 0)
             {
-              // here we need to copy / extract the current hole and border to the output arguments
-              hole_2Dcoords.push_back (current_hole);
-              border_2Dcoords.push_back (current_border);
+              // insert new border / region at the end of existing lists
+              holes_list.push_back (current_hole);
+              borders_list.push_back (current_border);
             }
             else
             {
-              // add current region to first neighbor
-              std::list<size_t>::const_iterator growing_region = shared_border_indices.begin ();
-              border_2Dcoords[*growing_region].insert (current_border.begin (), current_border.end ());
-              hole_2Dcoords[*growing_region].insert (hole_2Dcoords[*growing_region].end (),
-                  current_hole.begin (), current_hole.end ());
-              // multiple bordering regions
-              if (shared_border_indices.size () > 1)
+              // TODO: might look somewhat ugly, but is there a nicer way to do the same?
+              // add current region / border to first detected neighbor (last element in shared lists)
+              std::list<std::list<std::set<Eigen::Vector2i, Vector2iComp> >::iterator>::const_iterator merge_border_it;
+              std::list<std::list<std::vector<Eigen::Vector2i> >::iterator>::const_iterator merge_hole_it;
+
+              merge_border_it = shared_border_list.end ();
+              merge_hole_it = shared_hole_list.end ();
+              merge_border_it--;
+              merge_hole_it--;
+
+              (*merge_border_it)->insert (current_border.begin (), current_border.end ());
+              (*merge_hole_it)->insert ((*merge_hole_it)->end (), current_hole.begin (), current_hole.end ());
+
+              // do we need to merge some other regions as well?
+              if (shared_border_list.size () > 1)
               {
-                std::list<size_t>::const_iterator index_it = shared_border_indices.begin ();
-                index_it++;
-                // now add all other regions that share a border with the new region
-                while (index_it != shared_border_indices.end ())
+                std::list<std::list<std::set<Eigen::Vector2i, Vector2iComp> >::iterator>::const_iterator shared_b_it;
+                std::list<std::list<std::vector<Eigen::Vector2i> >::iterator>::const_iterator shared_h_it;
+                shared_b_it = shared_border_list.begin ();
+                shared_h_it = shared_hole_list.begin ();
+
+                while (shared_b_it != merge_border_it)
                 {
-                  border_2Dcoords[*growing_region].insert (border_2Dcoords[*index_it].begin (), border_2Dcoords[*index_it].end ());
-                  hole_2Dcoords[*growing_region].insert (hole_2Dcoords[*growing_region].end (),
-                      hole_2Dcoords[*index_it].begin (), hole_2Dcoords[*index_it].end ());
-                  index_it++;
-                }
-                // delete merged region (starting with the last one, so that indices / iterators still fit)
-                index_it--; // index_it points to the last (valid) element in shared_border_indices
-                while (index_it != growing_region)
-                {
-                  std::vector<std::vector<Eigen::Vector2i> >::iterator hole_del_it = hole_2Dcoords.begin ();
-                  std::vector<std::set<Eigen::Vector2i, Vector2iComp> >::iterator border_del_it = border_2Dcoords.begin ();
-                  for (size_t i = 0; i < *index_it; ++i)
-                  {
-                    hole_del_it++;
-                    border_del_it++;
-                  }
-                  hole_2Dcoords.erase (hole_del_it);
-                  border_2Dcoords.erase (border_del_it);
-                  index_it--;
+                  // add to border / hole to merge border / region
+                  (*merge_border_it)->insert ((*shared_b_it)->begin (), (*shared_b_it)->end ());
+                  (*merge_hole_it)->insert ((*merge_hole_it)->end (), (*shared_h_it)->begin (),
+                      (*shared_h_it)->end ());
+                  // delete old border / region
+                  borders_list.erase ((*shared_b_it));
+                  holes_list.erase ((*shared_h_it));
+                  // advance to next border / region to be merged
+                  shared_b_it++;
+                  shared_h_it++;
                 }
               }
             }
           }
         }
       }
-      // convert the border sets into vectors for output argument
-      all_border_2Dcoords.resize (border_2Dcoords.size ());
-      for (size_t i = 0; i < border_2Dcoords.size (); ++ i)
+
+      // TODO: change signature of method to provide lists as output arguments, since we might want to delete some regions later on...
+      all_border_2Dcoords.reserve (borders_list.size ());
+      hole_2Dcoords.reserve (holes_list.size ());
+
+      border_list_it = borders_list.begin ();
+      hole_list_it = holes_list.begin ();
+      while (border_list_it != borders_list.end ())
       {
-        all_border_2Dcoords[i].insert (all_border_2Dcoords[i].end (),
-            border_2Dcoords[i].begin (), border_2Dcoords[i].end ());
+        all_border_2Dcoords.push_back (std::vector<Eigen::Vector2i> (border_list_it->begin (),
+              border_list_it->end ()));
+        hole_2Dcoords.push_back (*hole_list_it);
+        border_list_it++;
+        hole_list_it++;
       }
     }
 
