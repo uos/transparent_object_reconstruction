@@ -377,6 +377,22 @@ struct HoleDetector
       recursiveNANGrowing (cloud, column, row + 1, hole_2Dcoords, border_2Dcoords, visited);
     }
 
+  template <typename PointT>
+    static void collectNaNRegions (
+        boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
+        const std::vector<Eigen::Vector2i> &hull_2Dcoords,
+        const Eigen::Vector2i &table_min,
+        const Eigen::Vector2i &table_max,
+        size_t min_region_size,
+        std::vector<std::vector<Eigen::Vector2i> > &hole_2Dcoords,
+        std::vector<std::vector<Eigen::Vector2i> > &all_border_2Dcoords)
+    {
+      // TODO: implement this
+      // TODO: change output arguments of iterativeNANGrowing () to lists
+      // TODO: call iterativeNANGrowing ()
+      // TODO: delete all regions (and corresponding borders) that have less than X points
+      // TODO: convert the lists into the output vectors
+    }
 
   template <typename PointT>
     static void iterativeNANGrowing (
