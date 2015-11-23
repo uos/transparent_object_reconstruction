@@ -52,6 +52,10 @@ class HoleIntersector
     {
       setUpVisMarkers ();
 
+      // retrieve minimal ratio of detected labels or use default parameter
+      nhandle_.param<float> ("/transObjRec/min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
+      ROS_INFO ("Set 'min_detected_label_ratio' to %f", min_detected_label_ratio_);
+
       vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
 
@@ -87,6 +91,8 @@ class HoleIntersector
         transparent_object_reconstruction::HoleIntersectorReset::Request req;
         transparent_object_reconstruction::HoleIntersectorReset::Response res;
         this->reset (req, res);
+        // check if a different label ration was provided
+        nhandle_.param<float> ("/transObjRec/min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
       }
 
       // since curious table explorer publishes every table view exactly once, we can omit check
@@ -375,8 +381,9 @@ class HoleIntersector
           else
           {
             non_intersec_marker_.points.push_back (voxel_center);
-            // TODO: change fraction, 0.5 is just for testing
-            if (static_cast<float> (nr_detected_labels) / static_cast<float> (available_labels_.size ()) > .75f)
+
+            // check if the minimal ratio of labels was detected
+            if (static_cast<float> (nr_detected_labels) / static_cast<float> (available_labels_.size ()) > min_detected_label_ratio_)
             {
               p_it = leaf_cloud->points.begin ();
               while (p_it != leaf_cloud->points.end ())
@@ -518,6 +525,7 @@ class HoleIntersector
     size_t min_leaf_points_;
     float octree_resolution_;
     std::string tabletop_frame_;
+    float min_detected_label_ratio_;
 
     void setUpVisMarkers (void)
     {
@@ -536,7 +544,7 @@ class HoleIntersector
       intersec_marker_.scale.x = octree_resolution_;
       intersec_marker_.scale.y = octree_resolution_;
       intersec_marker_.scale.z = octree_resolution_;
-      intersec_marker_.color.a = 0.25;
+      intersec_marker_.color.a = 0.75;
       intersec_marker_.color.r = 0.0;
       intersec_marker_.color.g = 1.0;
       intersec_marker_.color.b = 0.0;
@@ -544,6 +552,7 @@ class HoleIntersector
       non_intersec_marker_ = visualization_msgs::Marker (intersec_marker_);
       non_intersec_marker_.ns = "non_intersec";
       non_intersec_marker_.id = 1;
+      non_intersec_marker_.color.a = 0.15;
       non_intersec_marker_.color.r = 1.0;
       non_intersec_marker_.color.g = 0.0;
 
