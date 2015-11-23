@@ -348,7 +348,7 @@ struct HoleDetector
   }
 
   template <typename PointT>
-    static void recursiveNANGrowing (
+    static void recursiveNaNGrowing (
         boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
         int column, int row,
         std::vector<Eigen::Vector2i> &hole_2Dcoords,
@@ -371,47 +371,25 @@ struct HoleDetector
         return;
       }
       hole_2Dcoords.push_back (coordinates);
-      recursiveNANGrowing (cloud, column - 1, row, hole_2Dcoords, border_2Dcoords, visited);
-      recursiveNANGrowing (cloud, column + 1, row, hole_2Dcoords, border_2Dcoords, visited);
-      recursiveNANGrowing (cloud, column, row - 1, hole_2Dcoords, border_2Dcoords, visited);
-      recursiveNANGrowing (cloud, column, row + 1, hole_2Dcoords, border_2Dcoords, visited);
+      recursiveNaNGrowing (cloud, column - 1, row, hole_2Dcoords, border_2Dcoords, visited);
+      recursiveNaNGrowing (cloud, column + 1, row, hole_2Dcoords, border_2Dcoords, visited);
+      recursiveNaNGrowing (cloud, column, row - 1, hole_2Dcoords, border_2Dcoords, visited);
+      recursiveNaNGrowing (cloud, column, row + 1, hole_2Dcoords, border_2Dcoords, visited);
     }
 
   template <typename PointT>
-    static void collectNaNRegions (
+    static void iterativeNaNGrowing (
         boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
         const std::vector<Eigen::Vector2i> &hull_2Dcoords,
         const Eigen::Vector2i &table_min,
         const Eigen::Vector2i &table_max,
-        size_t min_region_size,
-        std::vector<std::vector<Eigen::Vector2i> > &hole_2Dcoords,
-        std::vector<std::vector<Eigen::Vector2i> > &all_border_2Dcoords)
+        std::list<std::vector<Eigen::Vector2i> > &holes_list,
+        std::list<std::set<Eigen::Vector2i, Vector2iComp> > &borders_list)
     {
-      // TODO: implement this
-      // TODO: change output arguments of iterativeNANGrowing () to lists
-      // TODO: call iterativeNANGrowing ()
-      // TODO: delete all regions (and corresponding borders) that have less than X points
-      // TODO: convert the lists into the output vectors
-    }
-
-  template <typename PointT>
-    static void iterativeNANGrowing (
-        boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
-        const std::vector<Eigen::Vector2i> &hull_2Dcoords,
-        const Eigen::Vector2i &table_min,
-        const Eigen::Vector2i &table_max,
-        std::vector<std::vector<Eigen::Vector2i> > &hole_2Dcoords,
-        std::vector<std::vector<Eigen::Vector2i> > &all_border_2Dcoords)
-    {
-      // iterative version of the recursive NAN-growing that can segfault, due to recursion depth...
+      // iterative version of the recursive NaN-growing that can segfault, due to recursion depth...
       // clear output arguments
-      hole_2Dcoords.clear ();
-      all_border_2Dcoords.clear ();
-
-      // TODO: probably these should not be local variables, but also used as output arguments...
-      // use local lists to simplify / speed up deletion of regions during merging
-      std::list<std::set<Eigen::Vector2i, Vector2iComp> > borders_list;
-      std::list<std::vector<Eigen::Vector2i> > holes_list;
+      holes_list.clear ();
+      borders_list.clear ();
 
       // create the inserted list locally
       std::vector<std::vector<bool> > inserted (cloud->width, std::vector<bool> (cloud->height, false));
@@ -420,7 +398,6 @@ struct HoleDetector
       // needed iterators
       std::list<std::set<Eigen::Vector2i, Vector2iComp> >::iterator border_list_it;
       std::list<std::vector<Eigen::Vector2i> >::iterator hole_list_it;
-
 
       // iterate over the bounding box of the table and check for seeds of nan regions
       for (int u = table_min[0]; u <= table_max[0]; ++u)
@@ -550,23 +527,57 @@ struct HoleDetector
           }
         }
       }
-
-      // TODO: change signature of method to provide lists as output arguments, since we might want to delete some regions later on...
-      all_border_2Dcoords.reserve (borders_list.size ());
-      hole_2Dcoords.reserve (holes_list.size ());
-
-      border_list_it = borders_list.begin ();
-      hole_list_it = holes_list.begin ();
-      while (border_list_it != borders_list.end ())
-      {
-        all_border_2Dcoords.push_back (std::vector<Eigen::Vector2i> (border_list_it->begin (),
-              border_list_it->end ()));
-        hole_2Dcoords.push_back (*hole_list_it);
-        border_list_it++;
-        hole_list_it++;
-      }
     }
 
+  template <typename PointT>
+    static void collectNaNRegions (
+        boost::shared_ptr<const ::pcl::PointCloud<PointT> > &cloud,
+        const std::vector<Eigen::Vector2i> &hull_2Dcoords,
+        const Eigen::Vector2i &table_min,
+        const Eigen::Vector2i &table_max,
+        size_t min_region_size,
+        std::vector<std::vector<Eigen::Vector2i> > &all_hole_2Dcoords,
+        std::vector<std::vector<Eigen::Vector2i> > &all_border_2Dcoords)
+    {
+      // clear output arguments
+      all_hole_2Dcoords.clear ();
+      all_border_2Dcoords.clear ();
+
+      // create local containers for temporary holes and borders
+      std::list<std::vector<Eigen::Vector2i> > all_holes_list;
+      std::list<std::set<Eigen::Vector2i, Vector2iComp> > all_borders_list;
+
+      iterativeNaNGrowing (cloud, hull_2Dcoords, table_min, table_max, all_holes_list, all_borders_list);
+
+      // delete all regions that have less than 'min_region_size' points
+      std::list<std::vector<Eigen::Vector2i> >::iterator hole_it = all_holes_list.begin ();
+      std::list<std::set<Eigen::Vector2i, Vector2iComp> >::iterator border_it = all_borders_list.begin ();
+      while (hole_it != all_holes_list.end ())
+      {
+        if (hole_it->size () < min_region_size)
+        {
+          hole_it = all_holes_list.erase (hole_it);
+          border_it = all_borders_list.erase (border_it);
+        }
+        else
+        {
+          hole_it++;
+          border_it++;
+        }
+      }
+      // convert lists to output arguments
+      all_hole_2Dcoords.reserve (all_holes_list.size ());
+      all_border_2Dcoords.reserve (all_borders_list.size ());
+      hole_it = all_holes_list.begin ();
+      border_it = all_borders_list.begin ();
+      while (hole_it != all_holes_list.end ())
+      {
+        all_hole_2Dcoords.push_back (*hole_it);
+        all_border_2Dcoords.push_back (std::vector<Eigen::Vector2i> (border_it->begin (), border_it->end ()));
+        hole_it++;
+        border_it++;
+      }
+    }
 
   template <typename PointT>
     static bool convertIndexTo2DCoords (
@@ -886,9 +897,11 @@ struct HoleDetector
       std::vector<std::vector<bool> > visited (input->width, std::vector<bool> (input->height, false));
 
       // iterative region growing
-      iterativeNANGrowing (input, hull_2Dcoords, table_min, table_max,
+      size_t min_region_size = 15;
+      collectNaNRegions (input, hull_2Dcoords, table_min, table_max, min_region_size,
           all_hole_2Dcoords, all_border_2Dcoords);
-      std::cout << "finished iterativeNANGrowing () call" << std::endl;
+      ROS_DEBUG_STREAM_NAMED ("HoleDetector", "iterativeNaNGrowing and filtering min_size "
+          << min_region_size << " resulted in " << all_hole_2Dcoords.size () << " regions");
 
       /*
       for (int u = table_min[0]; u < table_max[0]; ++u)
