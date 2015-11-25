@@ -52,8 +52,10 @@ class HoleIntersector
     {
       setUpVisMarkers ();
 
+      param_handle_ = ros::NodeHandle ("~");
+
       // retrieve minimal ratio of detected labels or use default parameter
-      nhandle_.param<float> ("~min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
+      param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
       ROS_INFO ("Set 'min_detected_label_ratio' to %f", min_detected_label_ratio_);
 
       vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
@@ -92,7 +94,7 @@ class HoleIntersector
         transparent_object_reconstruction::HoleIntersectorReset::Response res;
         this->reset (req, res);
         // check if a different label ration was provided
-        nhandle_.param<float> ("~min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
+        param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
       }
 
       // since curious table explorer publishes every table view exactly once, we can omit check
@@ -578,6 +580,7 @@ class HoleIntersector
 
   protected:
     ros::NodeHandle nhandle_;
+    ros::NodeHandle param_handle_;
     ros::Subscriber hole_sub_;
     
     ros::Publisher vis_pub_;
