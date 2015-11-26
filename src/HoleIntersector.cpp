@@ -6,6 +6,7 @@
 
 #include <tf/transform_listener.h>
 #include <tf_conversions/tf_eigen.h>
+#include <tf/transform_datatypes.h>
 #include <eigen_conversions/eigen_msg.h>
 
 #include <pcl_conversions/pcl_conversions.h>
@@ -41,14 +42,14 @@
 typedef pcl::octree::OctreePointCloud<LabelPoint> LabelOctree;
 typedef pcl::octree::OctreeContainerPointIndices LeafContainer;
 
-
 class HoleIntersector
 {
   public:
-    HoleIntersector (float octree_r, size_t min_points, std::string tabletop_frame) :
+    HoleIntersector (float octree_r, size_t min_points, std::string tabletop_frame, std::string map_frame) :
       octree_resolution_ (octree_r),
       min_leaf_points_ (min_points),
-      tabletop_frame_ (tabletop_frame)
+      tabletop_frame_ (tabletop_frame),
+      map_frame_ (map_frame)
     {
       setUpVisMarkers ();
 
@@ -97,24 +98,6 @@ class HoleIntersector
         param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
       }
 
-      // since curious table explorer publishes every table view exactly once, we can omit check
-      /*
-      // compare the timestamps of the headers - if the timestamps are less than 1 second apart, we assume same frame
-      std::vector<std_msgs::Header>::const_iterator view_it = collected_views_.begin ();
-      while (view_it != collected_views_.end ())
-      {
-        ros::Duration d = holes->convex_hulls.front ().header.stamp - view_it->stamp;
-        ros::Duration pos_sec (1.0);
-        ros::Duration neg_sec (-1.0);
-        if (d >= neg_sec && d <= pos_sec)
-        {
-          ROS_WARN ("Holes msg for frame '%s' already collected. Ignoring new message.",
-              holes->convex_hulls.front ().header.frame_id.c_str ());
-          return;
-        }
-        view_it++;
-      }
-      */
       // since the view was not present so far, add it to the collection
       collected_views_.push_back (holes->convex_hulls.front ().header);
       
@@ -149,18 +132,47 @@ class HoleIntersector
         ROS_WARN ("Transform unavailable: %s", ex.what ());
         return;
       }
-
       ROS_DEBUG ("got transform");
+
+      if (map_frame_.compare (tabletop_frame_) != 0)
+      {
+        if (!tflistener_.waitForTransform (tabletop_frame_, map_frame_,
+              holes->convex_hulls.front ().header.stamp, ros::Duration (50.0)))
+        {
+          ROS_ERROR ("Didn't retrieve a transfrom between '%s' and %s",
+              tabletop_frame_.c_str (),
+              map_frame_.c_str ());
+          return;
+        }
+        ROS_DEBUG ("finished waiting for transform between %s and %s",
+            tabletop_frame_.c_str (),
+            map_frame_.c_str ());
+
+        try
+        {
+          tflistener_.lookupTransform (map_frame_,
+              tabletop_frame_,
+              holes->convex_hulls[0].header.stamp,
+              table_to_map_);
+          tf::transformTFToEigen (table_to_map_, table_to_map_transform_);
+        }
+        catch (tf::TransformException &ex)
+        {
+          ROS_WARN ("Transform between %s and %s unavailable: %s",
+              tabletop_frame_.c_str (), map_frame_.c_str (), ex.what ());
+          return;
+        }
+      }
 
       // retrieve the label for the new points
       uint32_t current_label = transformed_holes_.size ();
       // convert the tf transform to Eigen...
-      Eigen::Affine3d eigen_transform;
-      tf::transformTFToEigen (tf_transform, eigen_transform);
+      Eigen::Affine3d hole_to_tabletop;
+      tf::transformTFToEigen (tf_transform, hole_to_tabletop);
 
       // Transform the origin of the frame where the holes were recorded
       Eigen::Vector3d transformed_origin;
-      pcl::transformPoint (Eigen::Vector3d::Zero (), transformed_origin, eigen_transform);
+      pcl::transformPoint (Eigen::Vector3d::Zero (), transformed_origin, hole_to_tabletop);
 
       std::vector<LabelCloudPtr> current_holes;
       current_holes.reserve (holes->convex_hulls.size ());
@@ -183,7 +195,7 @@ class HoleIntersector
 
         // transform into table frame (tabletop aligned with x-y-plane)
         LabelCloudPtr xy_hole_hull (new LabelCloud);
-        pcl::transformPointCloud (*hole_hull, *xy_hole_hull, eigen_transform);
+        pcl::transformPointCloud (*hole_hull, *xy_hole_hull, hole_to_tabletop);
 
         ROS_DEBUG ("successfully transformed pointcloud, Yay!");
 
@@ -258,11 +270,11 @@ class HoleIntersector
         // store the convex hull in the tabletop frame (with point labels)
         current_holes.push_back (xy_hole_sample_cloud);
         // store the transform
-        transforms_.push_back (eigen_transform);
+        transforms_.push_back (hole_to_tabletop);
 
         // transform sampled hole back into its original frame (where sensor is placed at (0,0,0))
         LabelCloudPtr hole_sample_cloud (new LabelCloud);
-        pcl::transformPointCloud (*xy_hole_sample_cloud, *hole_sample_cloud, eigen_transform.inverse ());
+        pcl::transformPointCloud (*xy_hole_sample_cloud, *hole_sample_cloud, hole_to_tabletop.inverse ());
 
         // ----- create frustum -----
         LabelCloudPtr frustum (new LabelCloud);
@@ -277,7 +289,7 @@ class HoleIntersector
           available_labels_.insert (current_label);
           // transform frustum into global frame
           LabelCloudPtr transformed_frustum (new LabelCloud);
-          pcl::transformPointCloud (*frustum, *transformed_frustum, eigen_transform);
+          pcl::transformPointCloud (*frustum, *transformed_frustum, hole_to_tabletop);
 
           // add frustum to collection of all frusta
           all_frusta_->points.reserve (all_frusta_->points.size () +
@@ -423,10 +435,22 @@ class HoleIntersector
         intersec_cloud_->height = 1;
         intersec_cloud_->width = intersec_cloud_->points.size ();
 
-        // publish
-        intersec_pub_.publish (intersec_cloud_);
+        if (map_frame_.compare (tabletop_frame_) != 0)
+        {
+          // transform and publish in map frame
+          LabelCloudPtr tmp_cloud (new LabelCloud);
+          pcl::transformPointCloud (*intersec_cloud_, *tmp_cloud, table_to_map_transform_);
+          header.frame_id = map_frame_;
+          pcl_conversions::toPCL (header, tmp_cloud->header);
 
-        // TODO: publish also as mesh or something similar
+          // publish
+          intersec_pub_.publish (tmp_cloud);
+        }
+        else
+        {
+          // publish
+          intersec_pub_.publish (intersec_cloud_);
+        }
       }
     };
 
@@ -444,8 +468,22 @@ class HoleIntersector
         partial_intersec_cloud_->height = 1;
         partial_intersec_cloud_->width = partial_intersec_cloud_->points.size ();
 
-        // publish
-        partial_intersec_pub_.publish (partial_intersec_cloud_);
+        if (map_frame_.compare (tabletop_frame_) != 0)
+        {
+          // transform and publish in map frame
+          LabelCloudPtr tmp_cloud (new LabelCloud);
+          pcl::transformPointCloud (*partial_intersec_cloud_, *tmp_cloud, table_to_map_transform_);
+          header.frame_id = map_frame_;
+          pcl_conversions::toPCL (header, tmp_cloud->header);
+
+          // publish
+          partial_intersec_pub_.publish (tmp_cloud);
+        }
+        else
+        {
+          // publish
+          partial_intersec_pub_.publish (partial_intersec_cloud_);
+        }
       }
     };
 
@@ -488,7 +526,34 @@ class HoleIntersector
         h += color_increment;
         start_index = end_index;
       }
-      all_frusta_pub_.publish (frusta_marker_);
+
+      if (map_frame_.compare (tabletop_frame_) != 0)
+      {
+        // copy currently existing markers
+        visualization_msgs::MarkerArray frusta_marker_in_map_frame (frusta_marker_);
+        // transform points into map frame and change header for each marker
+        tf::Point p_in_tt_frame, p_in_map_frame;
+        for (size_t i = 0; i < frusta_marker_in_map_frame.markers.size (); ++i)
+        {
+          frusta_marker_in_map_frame.markers[i].header.frame_id = map_frame_;
+          std::vector<geometry_msgs::Point>::iterator p_it = frusta_marker_in_map_frame.markers[i].points.begin ();
+          while (p_it != frusta_marker_in_map_frame.markers[i].points.end ())
+          {
+            tf::pointMsgToTF ((*p_it), p_in_tt_frame);
+            p_in_map_frame = table_to_map_ (p_in_tt_frame);
+            tf::pointTFToMsg (p_in_map_frame, (*p_it));
+            p_it++;
+          }
+        }
+
+        // publish marker in map frame
+        all_frusta_pub_.publish (frusta_marker_in_map_frame);
+      }
+      else
+      {
+        // publish marker in map frame
+        all_frusta_pub_.publish (frusta_marker_);
+      }
 
       ROS_DEBUG ("published markers, currently %lu views collected", collected_views_.size ());
     };
@@ -527,7 +592,10 @@ class HoleIntersector
     size_t min_leaf_points_;
     float octree_resolution_;
     std::string tabletop_frame_;
+    std::string map_frame_;
     float min_detected_label_ratio_;
+    Eigen::Affine3d table_to_map_transform_;
+    tf::StampedTransform table_to_map_;
 
     void setUpVisMarkers (void)
     {
@@ -676,7 +744,7 @@ int main (int argc, char **argv)
 {
   ros::init (argc, argv, "HoleIntersector");
 
-  HoleIntersector h (0.005f, 1, "tracked_table");
+  HoleIntersector h (0.005f, 1, "tracked_table", "map");
 
   ros::spin ();
 
