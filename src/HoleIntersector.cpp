@@ -62,8 +62,7 @@ class HoleIntersector
       vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
 
-      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/transparent_object_intersection", 10, true);
-      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/partial_intersection", 10, true);
+      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersection", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
 
@@ -72,7 +71,6 @@ class HoleIntersector
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
-      partial_intersec_cloud_ = boost::make_shared<LabelCloud> ();
 
     };
 
@@ -315,7 +313,6 @@ class HoleIntersector
     {
       // remove lingering contents of output clouds
       intersec_cloud_->points.clear ();
-      partial_intersec_cloud_->points.clear ();
 
       if (available_labels_.size () < 1)
       {
@@ -349,7 +346,6 @@ class HoleIntersector
 
       // iterate over all leaves to check which belongs to the intersection
       intersec_cloud_->points.reserve (all_frusta_->points.size ());
-      partial_intersec_cloud_->points.reserve (all_frusta_->points.size ());
       size_t nr_leaves, filled_leaves, intersec_leaves;
       nr_leaves = filled_leaves = intersec_leaves = 0;
       Eigen::Vector3f min, max, center;
@@ -388,7 +384,6 @@ class HoleIntersector
             p_it = leaf_cloud->points.begin ();
             while (p_it != leaf_cloud->points.end ())
             {
-              partial_intersec_cloud_->points.push_back (*p_it);
               intersec_cloud_->points.push_back (*p_it++);
             }
           }
@@ -402,7 +397,7 @@ class HoleIntersector
               p_it = leaf_cloud->points.begin ();
               while (p_it != leaf_cloud->points.end ())
               {
-                partial_intersec_cloud_->points.push_back (*p_it++);
+                intersec_cloud_->points.push_back (*p_it++);
               }
             }
           }
@@ -412,10 +407,6 @@ class HoleIntersector
       if (intersec_cloud_->points.size () > 0)
       {
         this->publish_intersec ();
-      }
-      if (partial_intersec_cloud_->points.size () > 0)
-      {
-        this->publish_partial_intersec ();
       }
 
       this->publish_markers ();
@@ -444,45 +435,12 @@ class HoleIntersector
           pcl_conversions::toPCL (header, tmp_cloud->header);
 
           // publish
-          intersec_pub_.publish (tmp_cloud);
-        }
-        else
-        {
-          // publish
-          intersec_pub_.publish (intersec_cloud_);
-        }
-      }
-    };
-
-    void publish_partial_intersec (void)
-    {
-      if (partial_intersec_cloud_ != NULL)
-      {
-        // create Header with appropriate frame and time stamp
-        std_msgs::Header header;
-        header.frame_id = tabletop_frame_;
-        header.stamp = ros::Time::now ();
-        pcl_conversions::toPCL (header, partial_intersec_cloud_->header);
-
-        // set width and height of cloud
-        partial_intersec_cloud_->height = 1;
-        partial_intersec_cloud_->width = partial_intersec_cloud_->points.size ();
-
-        if (map_frame_.compare (tabletop_frame_) != 0)
-        {
-          // transform and publish in map frame
-          LabelCloudPtr tmp_cloud (new LabelCloud);
-          pcl::transformPointCloud (*partial_intersec_cloud_, *tmp_cloud, table_to_map_transform_);
-          header.frame_id = map_frame_;
-          pcl_conversions::toPCL (header, tmp_cloud->header);
-
-          // publish
           partial_intersec_pub_.publish (tmp_cloud);
         }
         else
         {
           // publish
-          partial_intersec_pub_.publish (partial_intersec_cloud_);
+          partial_intersec_pub_.publish (intersec_cloud_);
         }
       }
     };
@@ -652,7 +610,6 @@ class HoleIntersector
     ros::Subscriber hole_sub_;
     
     ros::Publisher vis_pub_;
-    ros::Publisher intersec_pub_;
     ros::Publisher partial_intersec_pub_;
     ros::Publisher all_frusta_pub_;
 
@@ -664,7 +621,6 @@ class HoleIntersector
 
     LabelCloudPtr all_frusta_;
     LabelCloudPtr intersec_cloud_;
-    LabelCloudPtr partial_intersec_cloud_;
 
     std::set<uint32_t> available_labels_;
     std::vector<std_msgs::Header> collected_views_;

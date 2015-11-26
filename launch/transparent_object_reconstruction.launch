@@ -2,12 +2,6 @@
 <launch>
   <node name="HoleVisualizer" pkg="transparent_object_reconstruction" type="HoleVisualizer" output="screen"/>
   <node name="HoleIntersector" pkg="transparent_object_reconstruction" type="HoleIntersector" output="screen"/>
-  <node name="TotalIntersectionReconstruction" pkg="transparent_object_reconstruction" type="ExTraReconstructedObject" output="screen"/>
   <node name="PartialIntersectionReconstruction" pkg="transparent_object_reconstruction" type="ExTraReconstructedObject" output="screen">
-    <remap from="/transObjRec/transparent_object_intersection" to="/transObjRec/partial_intersection"/>
-    <remap from="/transObjRec/voxelized_intersection" to="/transObjRec/partial_voxel_intersec"/>
-    <remap from="/transObjRec/intersec_cluster_hulls" to="/transObjRec/partial_intersec_cluster_hulls"/>
-    <remap from="/transObjRec/trans_recon_results" to="/transObjRec/partial_trans_recon_results"/>
-    <remap from="/transObjRec/intersec_clusters" to="/transObjRec/partial_intersec_clusters"/>
   </node>
 </launch>
