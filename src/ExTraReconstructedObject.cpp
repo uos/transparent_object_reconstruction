@@ -48,7 +48,7 @@ class ExTraReconstructedObject
 
       all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("transObjRec/intersec_cluster_hulls", 10, true);
 
-      result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("transObjRec/trans_recon_results", 10, true);
+      result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("transObjRec/trans_recon_results", 10, false);
 
       intersec_sub_ = nhandle_.subscribe ("transObjRec/intersection", 1, &ExTraReconstructedObject::intersec_cb, this);
 
