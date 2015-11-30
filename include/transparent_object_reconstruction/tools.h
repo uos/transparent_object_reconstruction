@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Point.h>
+#include <shape_msgs/Mesh.h>
 
 #include <pcl/point_types.h>
 #include <pcl/ModelCoefficients.h>
@@ -1096,16 +1097,21 @@ convert (const PointT &point, geometry_msgs::Point &out_point)
  * @param[in] facets The factes of the convex hull as a vector of pcl::Vertices
  * @param[out] maker The visualization_msgs::Marler containing the mesh representation
  * @param[out] center_of_gravity The center point of the convex hull
+ * @param[out] mesh A representation of the convex hull as a shape_msgs::Mesh
  */
 template <typename PointT> inline void
 tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
     const std::vector<pcl::Vertices> &facets, visualization_msgs::Marker &marker,
-    Eigen::Vector3f &center_of_gravity)
+    Eigen::Vector3f &center_of_gravity, shape_msgs::Mesh &mesh)
 {
+  // clear and prepare output argument
+  mesh.triangles.clear ();
+  mesh.vertices.clear ();
+  mesh.triangles.reserve (facets.size ());
+  mesh.vertices.reserve (hull_cloud->points.size ());
+
   std::vector<Eigen::Vector3f> vertices;
-  std::vector<geometry_msgs::Point> points;
   vertices.reserve (hull_cloud->points.size ());
-  points.reserve (hull_cloud->points.size ());
   center_of_gravity = Eigen::Vector3f::Zero ();
   geometry_msgs::Point tmp_point;
   Eigen::Vector3f normal, v1, v2, v3;
@@ -1115,7 +1121,7 @@ tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
   {
     vertices.push_back (convert<Eigen::Vector3f, PointT> (*p_it));
     convert<PointT> (*p_it, tmp_point);
-    points.push_back (tmp_point);
+    mesh.vertices.push_back (tmp_point);
 
     center_of_gravity[0] += p_it->x;
     center_of_gravity[1] += p_it->y;
@@ -1126,6 +1132,7 @@ tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
 
   marker.points.clear ();
   marker.points.reserve (facets.size () * 3);
+  shape_msgs::MeshTriangle current_face;
   for (size_t i = 0; i < facets.size (); ++i)
   {
     if (facets[i].vertices.size () != 3)
@@ -1138,17 +1145,23 @@ tesselate3DConvexHull (const typename pcl::PointCloud<PointT>::Ptr &hull_cloud,
     v2 = vertices[facets[i].vertices[1]];
     v3 = vertices[facets[i].vertices[2]];
     normal = (v3 - v1).cross (v2 - v1);
-    marker.points.push_back (points[facets[i].vertices[0]]);
+    marker.points.push_back (mesh.vertices[facets[i].vertices[0]]);
+    current_face.vertex_indices[0] = facets[i].vertices[0];
     if ((v1 - center_of_gravity).dot (normal) > 0.0f)
     {
-      marker.points.push_back (points[facets[i].vertices[2]]);
-      marker.points.push_back (points[facets[i].vertices[1]]);
+      marker.points.push_back (mesh.vertices[facets[i].vertices[2]]);
+      marker.points.push_back (mesh.vertices[facets[i].vertices[1]]);
+      current_face.vertex_indices[1] = facets[i].vertices[2];
+      current_face.vertex_indices[2] = facets[i].vertices[1];
     }
     else
     {
-      marker.points.push_back (points[facets[i].vertices[1]]);
-      marker.points.push_back (points[facets[i].vertices[2]]);
+      marker.points.push_back (mesh.vertices[facets[i].vertices[1]]);
+      marker.points.push_back (mesh.vertices[facets[i].vertices[2]]);
+      current_face.vertex_indices[1] = facets[i].vertices[1];
+      current_face.vertex_indices[2] = facets[i].vertices[2];
     }
+    mesh.triangles.push_back (current_face);
   }
 }
 

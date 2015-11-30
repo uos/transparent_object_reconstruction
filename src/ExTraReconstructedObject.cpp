@@ -168,13 +168,14 @@ class ExTraReconstructedObject
         curr_hull_marker.color.b = b;
 
         Eigen::Vector3f cog;
-        tesselate3DConvexHull<LabelPoint> (convex_hull, polygons, curr_hull_marker, cog);
+        shape_msgs::Mesh curr_mesh;
+        tesselate3DConvexHull<LabelPoint> (convex_hull, polygons, curr_hull_marker, cog, curr_mesh);
         pcl_conversions::fromPCL (cloud->header, curr_hull_marker.header);
 
         // add current marker to marker array
         all_hulls.markers.push_back (curr_hull_marker);
 
-        // create riecongnized obj
+        // create recognized obj
         ss.str ("");
         ss << "trans_obj" << std::setw (2) << std::setfill ('0') << i;
 
@@ -196,7 +197,8 @@ class ExTraReconstructedObject
         sensor_msgs::PointCloud2 pc2;
         pcl::toROSMsg (*grid_cloud, pc2);
         o.point_clouds.push_back (pc2);
-        // TODO: should the mesh also be inserted into the recognizedObj?
+        // add the mesh to recognized obj
+        o.bounding_mesh = curr_mesh;
 
         // TODO: should covariance be set to identity matrix or remain 0-matrix?
 

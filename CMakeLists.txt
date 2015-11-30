@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   visualization_msgs
+  shape_msgs
   message_generation
   ecto
   ecto_ros
@@ -49,7 +50,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES transparent_object_reconstruction
-#  CATKIN_DEPENDS dynamic_reconfigure pcl_conversions pcl_msgs pcl_ros roscpp rospy sensor_msgs std_msgs visualization_msgs object_recognition_msgs
+#  CATKIN_DEPENDS dynamic_reconfigure pcl_conversions pcl_msgs pcl_ros roscpp rospy sensor_msgs std_msgs visualization_msgs shape_msgs object_recognition_msgs
 #  DEPENDS system_lib
 )
 
