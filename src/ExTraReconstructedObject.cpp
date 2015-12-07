@@ -155,6 +155,17 @@ class ExTraReconstructedObject
         h += color_increment;
         total_points += output[i]->points.size ();
 
+        // ====== refinement filter of the extracted clusters =====
+        // TODO: for each leaf in the extracted cluster
+        // TODO: retrieve point cloud of leaf
+        // TODO: generate an unoccupied marker array for the different viewpoint angles
+        // TODO: flip in marker array entries, depending on the individual labels (viewpoint rotation information) of the points in the leaf
+        // TODO: also flip several markers in the vicinity of the 'center marker'
+        // TODO: extract continuous intervals in marker array and add their length (sum in [0, 360])
+        // TODO: if combined length is above certain threshold, the leaf is confirmed, otherwise disregarded
+        // ====== refinement filter of the extracted clusters =====
+
+
         // compute Convex hull for current cluster
         LabelCloudPtr convex_hull (new LabelCloud);
         std::vector<pcl::Vertices> polygons;
