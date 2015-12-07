@@ -34,6 +34,9 @@
 #include <limits>
 
 
+typedef pcl::octree::OctreePointCloud<LabelPoint> LabelOctree;
+typedef pcl::octree::OctreeContainerPointIndices LeafContainer;
+
 class ExTraReconstructedObject
 {
   public:
@@ -68,21 +71,24 @@ class ExTraReconstructedObject
       all_hulls_vis_pub_.publish (clear_marker_array_);
 
       // reduce number of points that need to be clustered via voxel grid
-      LabelCloudPtr grid_cloud (new LabelCloud);
-      pcl::VoxelGrid<LabelPoint> v_grid;
-      v_grid.setInputCloud (cloud);
-      v_grid.setLeafSize (0.01f, 0.01f, 0.01f);
-      v_grid.setMinimumPointsNumberPerVoxel (1);
-      v_grid.filter (*grid_cloud);
+      LabelCloudPtr leaf_center_cloud (new LabelCloud);
+      float octree_resolution = 0.01f;  // TODO: make accessible parameter
+      LabelOctree::Ptr octree (new LabelOctree (octree_resolution));
+      octree->setInputCloud (cloud);
+      octree->addPointsFromInputCloud ();
+      octree->getOccupiedVoxelCenters (leaf_center_cloud->points);
+      // adapt dimensions of point cloud
+      leaf_center_cloud->width = leaf_center_cloud->points.size ();
+      leaf_center_cloud->height = 1;
 
-      ROS_INFO ("created grid cloud with %lu total points", grid_cloud->points.size ());
-      grid_cloud->header = cloud->header; // explicitly copy header information from incoming point cloud
-      voxel_cloud_pub_.publish (*grid_cloud);
+      ROS_INFO ("created grid cloud with %lu total points", leaf_center_cloud->points.size ());
+      leaf_center_cloud->header = cloud->header; // explicitly copy header information from incoming point cloud
+      voxel_cloud_pub_.publish (*leaf_center_cloud);
       
       // TODO: in theory a 3D region growing could also be done here and proof quicker (iff cloud was voxelized)
       // do Euclidean clustering on the voxelized cloud
       pcl::search::KdTree<LabelPoint>::Ptr tree (new pcl::search::KdTree<LabelPoint>);
-      tree->setInputCloud (grid_cloud);
+      tree->setInputCloud (leaf_center_cloud);
 
       std::vector<pcl::PointIndices> cluster_indices;
       pcl::EuclideanClusterExtraction<LabelPoint> ec;
@@ -90,7 +96,7 @@ class ExTraReconstructedObject
       ec.setMinClusterSize (min_cluster_size_);
       ec.setMaxClusterSize (max_cluster_size_);
       ec.setSearchMethod (tree);
-      ec.setInputCloud (grid_cloud);
+      ec.setInputCloud (leaf_center_cloud);
       ec.extract (cluster_indices);
 
       // retrieve the actual clusters from the indices
@@ -105,7 +111,7 @@ class ExTraReconstructedObject
           it != cluster_indices.end (); ++it)
       {
         pcl::ExtractIndices<LabelPoint> extract_object_indices;
-        extract_object_indices.setInputCloud (grid_cloud);
+        extract_object_indices.setInputCloud (leaf_center_cloud);
         extract_object_indices.setIndices (pcl::PointIndices::Ptr (new pcl::PointIndices(*it)));
         LabelCloudPtr tmp (new LabelCloud);
         extract_object_indices.filter (*tmp);
@@ -195,7 +201,7 @@ class ExTraReconstructedObject
         o.pose.pose.pose.orientation.z = 0.0f;
         o.pose.pose.pose.orientation.w = 1.0f;
         sensor_msgs::PointCloud2 pc2;
-        pcl::toROSMsg (*grid_cloud, pc2);
+        pcl::toROSMsg (*leaf_center_cloud, pc2);
         o.point_clouds.push_back (pc2);
         // add the mesh to recognized obj
         o.bounding_mesh = curr_mesh;
