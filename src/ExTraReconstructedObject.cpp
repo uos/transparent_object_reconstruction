@@ -76,6 +76,10 @@ class ExTraReconstructedObject
       LabelOctree::Ptr octree (new LabelOctree (octree_resolution));
       octree->setInputCloud (cloud);
       octree->addPointsFromInputCloud ();
+      // get dimensions of octree
+      Eigen::Vector3d min_bbox, max_bbox;
+      octree->getBoundingBox (min_bbox[0], min_bbox[1], min_bbox[2], max_bbox[0], max_bbox[1], max_bbox[2]);
+      // use the occupied leaf centers for voxelization of the point cloud
       octree->getOccupiedVoxelCenters (leaf_center_cloud->points);
       // adapt dimensions of point cloud
       leaf_center_cloud->width = leaf_center_cloud->points.size ();
@@ -135,6 +139,8 @@ class ExTraReconstructedObject
       pcl_conversions::fromPCL (cloud->header, transparent_recon_objs->header);
       transparent_recon_objs->objects.reserve (output.size ());
 
+      int id_x, id_y, id_z;
+
       for (size_t i = 0; i < output.size (); ++i)
       {
         hsv2rgb (h, r, g, b);
@@ -156,13 +162,55 @@ class ExTraReconstructedObject
         total_points += output[i]->points.size ();
 
         // ====== refinement filter of the extracted clusters =====
-        // TODO: for each leaf in the extracted cluster
-        // TODO: retrieve point cloud of leaf
-        // TODO: generate an unoccupied marker array for the different viewpoint angles
-        // TODO: flip in marker array entries, depending on the individual labels (viewpoint rotation information) of the points in the leaf
-        // TODO: also flip several markers in the vicinity of the 'center marker'
-        // TODO: extract continuous intervals in marker array and add their length (sum in [0, 360])
-        // TODO: if combined length is above certain threshold, the leaf is confirmed, otherwise disregarded
+        pcl::ExtractIndices<LabelPoint> extract;
+        std::vector<LabelCloud> leaf_clouds;
+
+        pcl::PointIndices::Ptr leaf_point_indices (new pcl::PointIndices);
+        // iterate over all leaf centers in the current cluster
+        LabelCloud::VectorType::const_iterator leaf_center_it = output[i]->points.begin ();
+        while (leaf_center_it != output[i]->points.end ())
+        {
+          // retrieve the octree indices of the current center
+          getOctreeIndices<LabelPoint> (min_bbox, *leaf_center_it, octree_resolution, id_x, id_y, id_z);
+          // retrieve the leaf container associated with the indices
+          if (octree->existLeaf (id_x, id_y, id_z))
+          {
+            LeafContainer* curr_container = octree->findLeaf (id_x, id_y, id_z);
+            if (curr_container != NULL)
+            {
+              LabelCloudPtr leaf_cloud (new LabelCloud);
+              // remove old leaves
+              leaf_point_indices->indices.clear ();
+              // retrieve point indices of current leaf
+              curr_container->getPointIndices (leaf_point_indices->indices);
+              // retrieve the points from the container
+              extract.setIndices (leaf_point_indices);
+              extract.filter (*leaf_cloud);
+
+              // generate an unoccupied marker array for the different viewpoint angles
+              std::vector<bool> histogram (360, false);
+              // now start to iterate over the leaf point cloud and fill the marker array
+              LabelCloud::VectorType::const_iterator point_it = leaf_cloud->points.begin ();
+              while (point_it != leaf_cloud->points.end ())
+              {
+                // TODO: for each point mark it and a certain region around it as true
+                point_it++;
+              }
+              // TODO: extract continuous intervals in marker array and add their length (sum in [0, 360])
+              // TODO: if combined length is above certain threshold, the leaf is confirmed, otherwise disregarded
+            }
+            else
+            {
+              ROS_WARN ("ExTraReconstructedObject: leaf exists, but doesn't provide valid container");
+            }
+          }
+          else
+          {
+            ROS_WARN ("ExTraReconstructedObject: specified indices %i %i %i don't refer to an existing leaf.",
+                id_x, id_y, id_z);
+          }
+          leaf_center_it++;
+        }
 
         // create new point cloud to hold the view point dependent intersection
         LabelCloudPtr refined_intersection (new LabelCloud);

@@ -1444,4 +1444,13 @@ storeCloudAsDepthImage (const typename pcl::PointCloud<PointT>::ConstPtr &cloud,
   img_file.close ();
 }
 
+template <typename PointT> inline void
+getOctreeIndices (const Eigen::Vector3d &min_bbox, const PointT &lp, float octree_res,
+    int &id_x, int &id_y, int &id_z)
+{
+  id_x = static_cast<int> ((lp.x - min_bbox[0]) / octree_res);
+  id_y = static_cast<int> ((lp.y - min_bbox[1]) / octree_res);
+  id_z = static_cast<int> ((lp.z - min_bbox[2]) / octree_res);
+}
+
 #endif // TRANSP_OBJ_RECON_TOOLS
