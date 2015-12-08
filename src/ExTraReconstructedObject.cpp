@@ -163,6 +163,15 @@ class ExTraReconstructedObject
         // TODO: also flip several markers in the vicinity of the 'center marker'
         // TODO: extract continuous intervals in marker array and add their length (sum in [0, 360])
         // TODO: if combined length is above certain threshold, the leaf is confirmed, otherwise disregarded
+
+        // create new point cloud to hold the view point dependent intersection
+        LabelCloudPtr refined_intersection (new LabelCloud);
+        // for now just copy the current input...
+        refined_intersection->points = output[i]->points;
+        refined_intersection->width = refined_intersection->points.size ();
+        refined_intersection->height = 1;
+        refined_intersection->header = output[i]->header;
+
         // ====== refinement filter of the extracted clusters =====
 
 
@@ -170,7 +179,7 @@ class ExTraReconstructedObject
         LabelCloudPtr convex_hull (new LabelCloud);
         std::vector<pcl::Vertices> polygons;
         pcl::ConvexHull<LabelPoint> c_hull;
-        c_hull.setInputCloud (output[i]);
+        c_hull.setInputCloud (refined_intersection);
         c_hull.setDimension (3);
         c_hull.reconstruct (*convex_hull, polygons);
 
