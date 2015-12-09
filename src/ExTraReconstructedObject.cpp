@@ -47,6 +47,9 @@ class ExTraReconstructedObject
     {
       voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/voxelized_intersection", 10, true);
 
+      refined_voxel_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/refined_voxel", 10, true);
+      refined_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/refined_intersec", 10, true);
+
       cluster_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersec_clusters", 10, true);
 
       all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("transObjRec/intersec_cluster_hulls", 10, true);
@@ -162,7 +165,13 @@ class ExTraReconstructedObject
         total_points += output[i]->points.size ();
 
         // ====== refinement filter of the extracted clusters =====
+        // create new point cloud to hold the view point dependent intersection
+        LabelCloudPtr refined_intersection (new LabelCloud);
+        LabelCloudPtr refined_voxel_centers (new LabelCloud);
+
+        // create extraction object
         pcl::ExtractIndices<LabelPoint> extract;
+        extract.setInputCloud (cloud);
         std::vector<LabelCloud> leaf_clouds;
 
         pcl::PointIndices::Ptr leaf_point_indices (new pcl::PointIndices);
@@ -176,7 +185,7 @@ class ExTraReconstructedObject
           if (octree->existLeaf (id_x, id_y, id_z))
           {
             LeafContainer* curr_container = octree->findLeaf (id_x, id_y, id_z);
-            if (curr_container != NULL)
+            if (curr_container != 0)
             {
               LabelCloudPtr leaf_cloud (new LabelCloud);
               // remove old leaves
@@ -188,16 +197,40 @@ class ExTraReconstructedObject
               extract.filter (*leaf_cloud);
 
               // generate an unoccupied marker array for the different viewpoint angles
-              std::vector<bool> histogram (360, false);
+              int angle_resolution = 360;
+              std::vector<bool> marker_array (angle_resolution, false);
+              int marker_region_width = 10;   // TODO: make accessible, find better name
               // now start to iterate over the leaf point cloud and fill the marker array
               LabelCloud::VectorType::const_iterator point_it = leaf_cloud->points.begin ();
               while (point_it != leaf_cloud->points.end ())
               {
-                // TODO: for each point mark it and a certain region around it as true
+                // for each point mark it and a certain region around it as true
+                for (int j = -marker_region_width; j <= marker_region_width; ++j)
+                {
+                  //marker_array[(point_it->label + j) % angle_resolution] = true;
+                  marker_array[(point_it->label * 30 + j + angle_resolution) % angle_resolution] = true; // hack to induce angle information into labeling for current data
+                }
                 point_it++;
               }
               // TODO: extract continuous intervals in marker array and add their length (sum in [0, 360])
+              // as a first implementation we just take sum up all marks and compare them to a given threshold
+              size_t min_orientation_range = 120;   // TODO: make accessible
+              size_t mark_counter = 0;
+              for (size_t j = 0; j < marker_array.size (); ++j)
+              {
+                if (marker_array[j])
+                {
+                  mark_counter++;
+                }
+              }
               // TODO: if combined length is above certain threshold, the leaf is confirmed, otherwise disregarded
+              if (mark_counter >= min_orientation_range)
+              {
+                refined_voxel_centers->points.push_back (*leaf_center_it);
+                refined_intersection->points.insert (refined_intersection->points.end (),
+                    leaf_cloud->points.begin (), leaf_cloud->points.end ());
+              }
+              // else discard the current voxel
             }
             else
             {
@@ -212,13 +245,13 @@ class ExTraReconstructedObject
           leaf_center_it++;
         }
 
-        // create new point cloud to hold the view point dependent intersection
-        LabelCloudPtr refined_intersection (new LabelCloud);
-        // for now just copy the current input...
-        refined_intersection->points = output[i]->points;
+        // set header and adapt the dimensions of the refined clouds
+        refined_intersection->header = output[i]->header;
         refined_intersection->width = refined_intersection->points.size ();
         refined_intersection->height = 1;
-        refined_intersection->header = output[i]->header;
+        refined_voxel_centers->header = output[i]->header;
+        refined_voxel_centers->width = refined_voxel_centers->points.size ();
+        refined_voxel_centers->height = 1;
 
         // ====== refinement filter of the extracted clusters =====
 
@@ -297,6 +330,8 @@ class ExTraReconstructedObject
     ros::Publisher all_hulls_vis_pub_;
     ros::Publisher cluster_pub_;
     ros::Publisher result_pub_;
+    ros::Publisher refined_intersec_pub_;
+    ros::Publisher refined_voxel_pub_;
 
     visualization_msgs::Marker hull_marker_;
     visualization_msgs::MarkerArray clear_marker_array_;
