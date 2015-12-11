@@ -411,8 +411,6 @@ class HoleIntersector
           }
           else
           {
-            non_intersec_marker_.points.push_back (voxel_center);
-
             // check if the minimal ratio of labels was detected
             if (static_cast<float> (nr_detected_labels) / static_cast<float> (available_labels_.size ()) > min_detected_label_ratio_)
             {
@@ -421,6 +419,10 @@ class HoleIntersector
               {
                 intersec_cloud_->points.push_back (*p_it++);
               }
+            }
+            else
+            {
+              non_intersec_marker_.points.push_back (voxel_center);
             }
           }
         }
