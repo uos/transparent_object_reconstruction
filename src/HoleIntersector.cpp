@@ -62,7 +62,7 @@ class HoleIntersector
       vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
 
-      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersection", 10, true);
+      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersection", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
 
@@ -457,12 +457,12 @@ class HoleIntersector
           pcl_conversions::toPCL (header, tmp_cloud->header);
 
           // publish
-          partial_intersec_pub_.publish (tmp_cloud);
+          intersec_pub_.publish (tmp_cloud);
         }
         else
         {
           // publish
-          partial_intersec_pub_.publish (intersec_cloud_);
+          intersec_pub_.publish (intersec_cloud_);
         }
       }
     };
@@ -626,8 +626,6 @@ class HoleIntersector
       // DELETEALL is not officially around before jade, addressed it by value
       clear_marker.action = 3;
       clear_marker_array_.markers.push_back (clear_marker);
-
-
     };
 
   protected:
@@ -636,7 +634,7 @@ class HoleIntersector
     ros::Subscriber hole_sub_;
     
     ros::Publisher vis_pub_;
-    ros::Publisher partial_intersec_pub_;
+    ros::Publisher intersec_pub_;
     ros::Publisher all_frusta_pub_;
 
     ros::ServiceServer reset_service_;
