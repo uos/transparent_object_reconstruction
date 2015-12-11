@@ -72,6 +72,9 @@ class HoleIntersector
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
 
+      // TODO: make accessible via parameter
+      angle_resolution_ = 360;
+
     };
 
     void add_holes_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
@@ -106,7 +109,7 @@ class HoleIntersector
 
       if (!tflistener_.waitForTransform (holes->convex_hulls.front ().header.frame_id,
           tabletop_frame_,
-          holes->convex_hulls.front ().header.stamp, ros::Duration (600.0)))
+          holes->convex_hulls.front ().header.stamp, ros::Duration (10.0)))
       {
         ROS_ERROR ("Didn't retrieve a transfrom between %s and %s",
             holes->convex_hulls.front ().header.frame_id.c_str (),
@@ -124,6 +127,7 @@ class HoleIntersector
             holes->convex_hulls[0].header.frame_id,
             holes->convex_hulls[0].header.stamp,
             tf_transform);
+            current_yaw_ = tf::getYaw (tf_transform.getRotation ());
       }
       catch (tf::TransformException &ex)
       {
@@ -163,7 +167,25 @@ class HoleIntersector
       }
 
       // retrieve the label for the new points
-      uint32_t current_label = transformed_holes_.size ();
+      // compute the current label from the used orientation
+      double yaw_in_degrees = pcl::rad2deg (current_yaw_);
+      while (yaw_in_degrees < 0.0f)
+      {
+        yaw_in_degrees += 360.0f;
+      }
+      // scale to desired resolution
+      uint32_t current_label = static_cast<uint32_t> (yaw_in_degrees * 360.0f / angle_resolution_);
+      all_labels_.insert (current_label);
+
+      std::set<uint32_t>::const_iterator label_it = all_labels_.begin ();
+      std::cout  << "all_labels: ";
+      while (label_it != all_labels_.end ())
+      {
+        std::cout << *label_it << " ";
+        label_it++;
+      }
+      std::cout << std::endl;
+
       // convert the tf transform to Eigen...
       Eigen::Affine3d hole_to_tabletop;
       tf::transformTFToEigen (tf_transform, hole_to_tabletop);
@@ -552,8 +574,12 @@ class HoleIntersector
     std::string tabletop_frame_;
     std::string map_frame_;
     float min_detected_label_ratio_;
+    double current_yaw_;
+    int angle_resolution_;
     Eigen::Affine3d table_to_map_transform_;
     tf::StampedTransform table_to_map_;
+
+    std::set<uint32_t> all_labels_;
 
     void setUpVisMarkers (void)
     {

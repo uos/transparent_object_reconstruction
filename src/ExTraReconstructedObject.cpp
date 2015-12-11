@@ -199,7 +199,7 @@ class ExTraReconstructedObject
               // generate an unoccupied marker array for the different viewpoint angles
               int angle_resolution = 360;
               std::vector<bool> marker_array (angle_resolution, false);
-              int marker_region_width = 10;   // TODO: make accessible, find better name
+              int marker_region_width = 20;   // TODO: make accessible, find better name
               // now start to iterate over the leaf point cloud and fill the marker array
               LabelCloud::VectorType::const_iterator point_it = leaf_cloud->points.begin ();
               while (point_it != leaf_cloud->points.end ())
@@ -207,14 +207,13 @@ class ExTraReconstructedObject
                 // for each point mark it and a certain region around it as true
                 for (int j = -marker_region_width; j <= marker_region_width; ++j)
                 {
-                  //marker_array[(point_it->label + j) % angle_resolution] = true;
-                  marker_array[(point_it->label * 30 + j + angle_resolution) % angle_resolution] = true; // hack to induce angle information into labeling for current data
+                  marker_array[(point_it->label + j) % angle_resolution] = true;
                 }
                 point_it++;
               }
               // TODO: extract continuous intervals in marker array and add their length (sum in [0, 360])
               // as a first implementation we just take sum up all marks and compare them to a given threshold
-              size_t min_orientation_range = 120;   // TODO: make accessible
+              size_t min_orientation_range = 180;   // TODO: make accessible
               size_t mark_counter = 0;
               for (size_t j = 0; j < marker_array.size (); ++j)
               {
@@ -252,6 +251,12 @@ class ExTraReconstructedObject
         refined_voxel_centers->header = output[i]->header;
         refined_voxel_centers->width = refined_voxel_centers->points.size ();
         refined_voxel_centers->height = 1;
+
+        if (i == 0)
+        {
+          refined_voxel_pub_.publish (refined_voxel_centers);
+          refined_intersec_pub_.publish (refined_intersection);
+        }
 
         // ====== refinement filter of the extracted clusters =====
 
