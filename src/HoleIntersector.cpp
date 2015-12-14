@@ -74,6 +74,8 @@ class HoleIntersector
 
       // TODO: make accessible via parameter
       angle_resolution_ = 360;
+      opening_angle_ = 20;
+      min_view_count_ = 180;
 
     };
 
@@ -371,6 +373,7 @@ class HoleIntersector
       size_t nr_leaves, filled_leaves, intersec_leaves;
       nr_leaves = filled_leaves = intersec_leaves = 0;
       Eigen::Vector3f min, max, center;
+      Eigen::Vector3d center_double;
       geometry_msgs::Point voxel_center;
       while (leaf_it != octree_->leaf_end ())
       {
@@ -393,37 +396,26 @@ class HoleIntersector
           octree_->getVoxelBounds (leaf_it, min, max);
           center = min + max;
           center /= 2.0f;
-          voxel_center.x = center[0];
-          voxel_center.y = center[1];
-          voxel_center.z = center[2];
+          // transform center from tabletop to map frame
+          center_double = Eigen::Vector3d (center[0], center[1], center[2]);
+          center_double = table_to_map_transform_ * center_double;
+          voxel_center.x = center_double[0];
+          voxel_center.y = center_double[1];
+          voxel_center.z = center_double[2];
 
           size_t nr_detected_labels;
           bool detected_fraction;
-          if (isLeafInIntersection (*leaf_cloud, available_labels_, nr_detected_labels))
+          size_t view_count;
+          if (isLeafInIntersectionViewPoint (*leaf_cloud, view_count))
           {
             intersec_marker_.points.push_back (voxel_center);
             intersec_leaves++;
-            p_it = leaf_cloud->points.begin ();
-            while (p_it != leaf_cloud->points.end ())
-            {
-              intersec_cloud_->points.push_back (*p_it++);
-            }
+            intersec_cloud_->points.insert (intersec_cloud_->points.end (),
+                leaf_cloud->points.begin (), leaf_cloud->points.end ());
           }
           else
           {
-            // check if the minimal ratio of labels was detected
-            if (static_cast<float> (nr_detected_labels) / static_cast<float> (available_labels_.size ()) > min_detected_label_ratio_)
-            {
-              p_it = leaf_cloud->points.begin ();
-              while (p_it != leaf_cloud->points.end ())
-              {
-                intersec_cloud_->points.push_back (*p_it++);
-              }
-            }
-            else
-            {
-              non_intersec_marker_.points.push_back (voxel_center);
-            }
+            non_intersec_marker_.points.push_back (voxel_center);
           }
         }
         leaf_it++;
@@ -472,9 +464,11 @@ class HoleIntersector
     void publish_markers (void)
     {
       intersec_marker_.header.stamp = ros::Time::now ();
-      intersec_marker_.header.frame_id = tabletop_frame_;
       non_intersec_marker_.header.stamp = ros::Time::now ();
-      non_intersec_marker_.header.frame_id = tabletop_frame_;
+      // set frame_id of markers to map frame
+      intersec_marker_.header.frame_id = map_frame_;
+      non_intersec_marker_.header.frame_id = map_frame_;
+
       // publish visualization marker
       visualization_msgs::MarkerArray vis_marker_array;
       vis_marker_array.markers.push_back (intersec_marker_);
@@ -576,8 +570,12 @@ class HoleIntersector
     std::string tabletop_frame_;
     std::string map_frame_;
     float min_detected_label_ratio_;
+
     double current_yaw_;
     int angle_resolution_;
+    int opening_angle_;
+    int min_view_count_;
+
     Eigen::Affine3d table_to_map_transform_;
     tf::StampedTransform table_to_map_;
 
@@ -717,6 +715,39 @@ class HoleIntersector
       }
       if (!missing_label)
         return true;
+      return false;
+    };
+
+    bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud,
+        size_t &view_count)
+    {
+      std::vector<bool> viewpoint_marker (angle_resolution_, false);
+
+      LabelCloud::VectorType::const_iterator p_it = leaf_cloud.points.begin ();
+      while (p_it != leaf_cloud.points.end ())
+      {
+        for (int i = -opening_angle_; i <= opening_angle_; ++i)
+        {
+          viewpoint_marker[(p_it->label + i + angle_resolution_) % angle_resolution_] = true;
+        }
+        p_it++;
+      }
+
+      view_count = 0;
+      std::vector<bool>::const_iterator marker_it = viewpoint_marker.begin ();
+      while (marker_it != viewpoint_marker.end ())
+      {
+        if (*marker_it++)
+        {
+          view_count++;
+        }
+      }
+
+      if (view_count >= min_view_count_)
+      {
+        return true;
+      }
+
       return false;
     };
 
