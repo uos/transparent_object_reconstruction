@@ -75,7 +75,7 @@ class HoleIntersector
       // TODO: make accessible via parameter
       angle_resolution_ = 360;
       opening_angle_ = 20;
-      min_view_count_ = 180;
+      min_view_count_ = 120;
 
     };
 
