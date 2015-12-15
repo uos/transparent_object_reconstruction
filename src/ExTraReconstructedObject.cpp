@@ -69,6 +69,8 @@ class ExTraReconstructedObject
     {
       ROS_INFO ("received intersection cloud with %lu points", cloud->points.size ());
 
+      static int call_counter = 0;
+
       // clear old marker
       pcl_conversions::fromPCL (cloud->header, clear_marker_array_.markers.front ().header);
       all_hulls_vis_pub_.publish (clear_marker_array_);
@@ -165,6 +167,144 @@ class ExTraReconstructedObject
         total_points += output[i]->points.size ();
 
         // ====== refinement filter of the extracted clusters =====
+
+        // collect all labels in the current cluster
+        std::set<uint32_t> all_labels_in_cluster;
+
+        // let's just try the complete intersection with all available cluster labels here...
+        LabelCloudPtr refined_intersection (new LabelCloud);
+        LabelCloudPtr refined_voxel_centers (new LabelCloud);
+
+        // create extraction object
+        pcl::ExtractIndices<LabelPoint> extract;
+        extract.setInputCloud (cloud);
+        std::vector<LabelCloud> leaf_clouds;
+        leaf_clouds.reserve (output[i]->points.size ());
+        std::vector<size_t> leaf_label_numbers;
+        leaf_label_numbers.reserve (output[i]->points.size ());
+
+        pcl::PointIndices::Ptr leaf_point_indices (new pcl::PointIndices);
+        // iterate over all leaf centers in the current cluster
+        LabelCloud::VectorType::const_iterator leaf_center_it = output[i]->points.begin ();
+        size_t total_cluster_points = 0;
+
+        // ===== bin visualization =====
+        std::stringstream img_ss;
+        img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
+          <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
+        std::ofstream img (img_ss.str ().c_str ());
+        img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n360 " << output[i]->points.size ()
+          << std::endl;
+        Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
+        // ===== bin visualization =====
+
+        while (leaf_center_it != output[i]->points.end ())
+        {
+          // retrieve the octree indices of the current center
+          getOctreeIndices<LabelPoint> (min_bbox, *leaf_center_it, octree_resolution, id_x, id_y, id_z);
+          // retrieve the leaf container associated with the indices
+          if (octree->existLeaf (id_x, id_y, id_z))
+          {
+            LeafContainer* curr_container = octree->findLeaf (id_x, id_y, id_z);
+            if (curr_container != 0)
+            {
+              LabelCloudPtr leaf_cloud (new LabelCloud);
+              // remove old leaves
+              leaf_point_indices->indices.clear ();
+              // retrieve point indices of current leaf
+              curr_container->getPointIndices (leaf_point_indices->indices);
+              // retrieve the points from the container
+              extract.setIndices (leaf_point_indices);
+              extract.filter (*leaf_cloud);
+
+              std::set<uint32_t> leaf_labels;
+              LabelCloud::VectorType::const_iterator leaf_point_it = leaf_cloud->points.begin ();
+              while (leaf_point_it != leaf_cloud->points.end ())
+              {
+                leaf_labels.insert (leaf_point_it->label);
+                leaf_point_it++;
+              }
+
+              // ===== bin visualization =====
+              int angle_resolution = 360;
+              int opening_angle = 20;
+              std::vector<bool> view_bin_marker (angle_resolution, false);
+              LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
+              while (marker_it != leaf_cloud->points.end ())
+              {
+                for (int k = -opening_angle; k <= opening_angle; ++k)
+                {
+                  view_bin_marker[(marker_it->label + k + angle_resolution) % angle_resolution] = true;
+                }
+                marker_it++;
+              }
+              for (size_t k = 0; k < view_bin_marker.size (); ++k)
+              {
+                if (view_bin_marker[k] == true)
+                {
+                  img << "1";
+                }
+                else
+                {
+                  img << "0";
+                }
+                img << " ";
+              }
+              img << std::endl;
+              approx_cluster_center[0] += leaf_center_it->x;
+              approx_cluster_center[1] += leaf_center_it->y;
+              approx_cluster_center[2] += leaf_center_it->z;
+              // ===== bin visualization =====
+
+              // store points of current leaf
+              leaf_clouds.push_back (*leaf_cloud);
+              // store nr of labels of current leaf
+              leaf_label_numbers.push_back (leaf_labels.size ());
+              // add leaf labels to collection of cluster labels
+              all_labels_in_cluster.insert (leaf_labels.begin (), leaf_labels.end ());
+              total_cluster_points += leaf_cloud->points.size ();
+            }
+            else
+            {
+              ROS_WARN ("ExTraReconstructedObject: leaf exists, but doesn't provide valid container");
+            }
+          }
+          else
+          {
+            ROS_WARN ("ExTraReconstructedObject: specified indices %i %i %i don't refer to an existing leaf.",
+                id_x, id_y, id_z);
+          }
+          leaf_center_it++;
+        }
+
+        // ===== bin visualization =====
+        img << "# cluster contained labels at the following positions: ";
+        std::set<uint32_t>::const_iterator label_it = all_labels_in_cluster.begin ();
+        while (label_it != all_labels_in_cluster.end ())
+        {
+          img << *label_it++ << " ";
+        }
+        img << std::endl;
+        img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
+          << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
+        img.flush ();
+        img.close ();
+        // ===== bin visualization =====
+
+        // now iterate over the nr of detected labels in the leaves and decide which leaf should be retained
+        refined_voxel_centers->points.reserve (output[i]->points.size ());
+        refined_intersection->points.reserve (total_cluster_points);
+        for (size_t j = 0; j < leaf_clouds.size (); ++j)
+        {
+          if (leaf_label_numbers[j] >= (all_labels_in_cluster.size () * 0.6f))
+          {
+            refined_voxel_centers->points.push_back (output[i]->points[j]);
+            refined_intersection->points.insert (refined_intersection->points.end (),
+                leaf_clouds[j].points.begin (), leaf_clouds[j].points.end ());
+          }
+        }
+
+/*
         // create new point cloud to hold the view point dependent intersection
         LabelCloudPtr refined_intersection (new LabelCloud);
         LabelCloudPtr refined_voxel_centers (new LabelCloud);
@@ -244,6 +384,7 @@ class ExTraReconstructedObject
           leaf_center_it++;
         }
 
+*/
         // set header and adapt the dimensions of the refined clouds
         refined_intersection->header = output[i]->header;
         refined_intersection->width = refined_intersection->points.size ();
@@ -321,6 +462,8 @@ class ExTraReconstructedObject
       all_hulls_vis_pub_.publish (all_hulls);
 
       result_pub_.publish (transparent_recon_objs);
+
+      call_counter++;
 
       ROS_INFO ("finished callback, published %lu clusters with a total of %lu points",
           output.size (), total_points);
