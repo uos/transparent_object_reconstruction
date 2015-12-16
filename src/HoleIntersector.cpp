@@ -31,6 +31,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/Holes.h>
@@ -774,6 +775,52 @@ class HoleIntersector
       return false;
     };
 
+    bool isLeafInIntersectionViewPoint2 (const LabelCloud &leaf_cloud,
+        size_t &view_count)
+    {
+      // check if number of points is sufficient
+      if (leaf_cloud.points.size () < (min_view_count_ / opening_angle_))
+      {
+        return false;
+      }
+      // gather all labels in the point cloud
+      std::vector<uint32_t> leaf_labels (leaf_cloud.points.size ());
+      for (size_t i = 0; i < leaf_cloud.points.size (); ++i)
+      {
+        leaf_labels[i] = leaf_cloud.points[i].label;
+      }
+      std::sort (leaf_labels.begin (), leaf_labels.end ());
+      std::vector<uint32_t>::iterator last_label = std::unique (leaf_labels.begin (), leaf_labels.end ());
+
+      // now generate the viewpoint marker array from the detected labels
+      std::vector<bool> viewpoint_marker (angle_resolution_, false);
+      std::vector<uint32_t>::const_iterator label_it = leaf_labels.begin ();
+      while (label_it != last_label)
+      {
+        for (int i = -opening_angle_; i <= opening_angle_; ++i)
+        {
+          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = true;
+        }
+        label_it++;
+      }
+
+      // gather the number of marks in the viewpoint marker
+      view_count = 0;
+      std::vector<bool>::const_iterator marker_it = viewpoint_marker.begin ();
+      while (marker_it != viewpoint_marker.end ())
+      {
+        if (*marker_it++)
+        {
+          view_count++;
+        }
+      }
+      if (view_count >= min_view_count_)
+      {
+        return true;
+      }
+
+      return false;
+    };
 };
 
 int main (int argc, char **argv)
