@@ -731,18 +731,32 @@ class HoleIntersector
     bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud,
         size_t &view_count)
     {
-      std::vector<bool> viewpoint_marker (angle_resolution_, false);
-
+      // check if number of points is sufficient
+      if (leaf_cloud.points.size () < (min_view_count_ / opening_angle_))
+      {
+        return false;
+      }
+      // gather all labels in the point cloud
+      std::set<uint32_t> leaf_labels;
       LabelCloud::VectorType::const_iterator p_it = leaf_cloud.points.begin ();
       while (p_it != leaf_cloud.points.end ())
       {
-        for (int i = -opening_angle_; i <= opening_angle_; ++i)
-        {
-          viewpoint_marker[(p_it->label + i + angle_resolution_) % angle_resolution_] = true;
-        }
+        leaf_labels.insert (p_it->label);
         p_it++;
       }
 
+      // now generate the viewpoint marker array from the detected labels
+      std::vector<bool> viewpoint_marker (angle_resolution_, false);
+      std::set<uint32_t>::const_iterator label_it = leaf_labels.begin ();
+      while (label_it != leaf_labels.end ())
+      {
+        for (int i = -opening_angle_; i <= opening_angle_; ++i)
+        {
+          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = true;
+        }
+        label_it++;
+      }
+      // gather the number of marks in the viewpoint marker
       view_count = 0;
       std::vector<bool>::const_iterator marker_it = viewpoint_marker.begin ();
       while (marker_it != viewpoint_marker.end ())
@@ -752,7 +766,6 @@ class HoleIntersector
           view_count++;
         }
       }
-
       if (view_count >= min_view_count_)
       {
         return true;
