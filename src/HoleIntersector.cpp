@@ -89,6 +89,8 @@ class HoleIntersector
         return;
       }
 
+      ros::Time cb_start_time = ros::Time::now ();
+
       // check for bag loop
       static bag_loop_check::BagLoopCheck bagloop;
       if (bagloop && collected_views_.size () > 0)
@@ -326,9 +328,17 @@ class HoleIntersector
       }
       // store all convex hulls of the current Holes msgs (aligned to tabletop)
       transformed_holes_.push_back (current_holes);
-      
+
+      ros::Time before_intersec_time = ros::Time::now ();
       // compute intersection
       this->computeIntersection ();
+      ros::Time finished_intersec_time = ros::Time::now ();
+
+      ros::Duration cb_duration = finished_intersec_time - cb_start_time;
+      ros::Duration intersec_duration = finished_intersec_time - before_intersec_time;
+      ROS_INFO ("callback duration: %lf", cb_duration.toSec ());
+      ROS_INFO ("intersec time: %lf", intersec_duration.toSec ());
+
 
       ROS_INFO ("Finished callback, intersections and visualization for %lu views are computed", collected_views_.size ());
     };
