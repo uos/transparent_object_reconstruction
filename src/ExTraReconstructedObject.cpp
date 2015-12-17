@@ -57,7 +57,7 @@ class ExTraReconstructedObject
 
       result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("transObjRec/trans_recon_results", 10, false);
 
-      intersec_sub_ = nhandle_.subscribe ("transObjRec/intersection", 1, &ExTraReconstructedObject::intersec_cb, this);
+      intersec_sub_ = nhandle_.subscribe ("transObjRec/intersection", 5, &ExTraReconstructedObject::intersec_cb, this);
 
       ROS_INFO ("created ExTraReconstructedObject and subscribed to topic");
 
