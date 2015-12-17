@@ -30,6 +30,7 @@
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/tools.h>
 
+#include <map>
 #include <iostream>
 #include <limits>
 
@@ -193,9 +194,11 @@ class ExTraReconstructedObject
         img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
           <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
         std::ofstream img (img_ss.str ().c_str ());
-        img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n360 " << output[i]->points.size ()
-          << std::endl;
+        img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
         Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
+        std::multimap<size_t, std::string> img_map;
+        int angle_resolution = 360;   // TODO: read in as parameters
+        int opening_angle = 20;
         // ===== bin visualization =====
 
         while (leaf_center_it != output[i]->points.end ())
@@ -226,31 +229,26 @@ class ExTraReconstructedObject
               }
 
               // ===== bin visualization =====
-              int angle_resolution = 360;
-              int opening_angle = 20;
-              std::vector<bool> view_bin_marker (angle_resolution, false);
+              std::vector<uint8_t> view_bin_marker (angle_resolution, 0);
               LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
               while (marker_it != leaf_cloud->points.end ())
               {
                 for (int k = -opening_angle; k <= opening_angle; ++k)
                 {
-                  view_bin_marker[(marker_it->label + k + angle_resolution) % angle_resolution] = true;
+                  view_bin_marker[(marker_it->label + k + angle_resolution) % angle_resolution] = 1;
                 }
                 marker_it++;
               }
+              std::stringstream img_ss;
+              size_t img_map_counter = 0;
               for (size_t k = 0; k < view_bin_marker.size (); ++k)
               {
-                if (view_bin_marker[k] == true)
-                {
-                  img << "1";
-                }
-                else
-                {
-                  img << "0";
-                }
-                img << " ";
+                img_ss << view_bin_marker[k] << " ";
+                img_map_counter += view_bin_marker[k];
               }
-              img << std::endl;
+              img_ss << std::endl;
+              img_map.insert (std::pair<size_t, std::string> (img_map_counter, img_ss.str ()));
+
               approx_cluster_center[0] += leaf_center_it->x;
               approx_cluster_center[1] += leaf_center_it->y;
               approx_cluster_center[2] += leaf_center_it->z;
@@ -287,6 +285,14 @@ class ExTraReconstructedObject
         img << std::endl;
         img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
           << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
+        img << angle_resolution << output[i]->points.size () << std::endl;
+
+        std::multimap<size_t, std::string>::const_iterator map_it = img_map.begin ();
+        while (map_it != img_map.end ())
+        {
+          img << map_it->second;
+          map_it++;
+        }
         img.flush ();
         img.close ();
         // ===== bin visualization =====

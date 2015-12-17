@@ -747,25 +747,23 @@ class HoleIntersector
       }
 
       // now generate the viewpoint marker array from the detected labels
-      std::vector<bool> viewpoint_marker (angle_resolution_, false);
+      std::vector<uint8_t> viewpoint_marker (angle_resolution_, 0);
       std::set<uint32_t>::const_iterator label_it = leaf_labels.begin ();
       while (label_it != leaf_labels.end ())
       {
         for (int i = -opening_angle_; i <= opening_angle_; ++i)
         {
-          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = true;
+          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = 1;
         }
         label_it++;
       }
+
       // gather the number of marks in the viewpoint marker
       view_count = 0;
-      std::vector<bool>::const_iterator marker_it = viewpoint_marker.begin ();
+      std::vector<uint8_t>::const_iterator marker_it = viewpoint_marker.begin ();
       while (marker_it != viewpoint_marker.end ())
       {
-        if (*marker_it++)
-        {
-          view_count++;
-        }
+        view_count += *marker_it++;
       }
       if (view_count >= min_view_count_)
       {
