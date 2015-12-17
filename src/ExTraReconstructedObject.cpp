@@ -196,11 +196,14 @@ class ExTraReconstructedObject
         std::ofstream img (img_ss.str ().c_str ());
         img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
         Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
-        std::multimap<size_t, std::string> img_map;
+        // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
+        // number of bin entries
+        std::multimap<size_t, std::pair<size_t, std::string> > img_map;
         int angle_resolution = 360;   // TODO: read in as parameters
         int opening_angle = 20;
         // ===== bin visualization =====
 
+        size_t center_index = 0;
         while (leaf_center_it != output[i]->points.end ())
         {
           // retrieve the octree indices of the current center
@@ -247,7 +250,8 @@ class ExTraReconstructedObject
                 img_map_counter += view_bin_marker[k];
               }
               img_ss << std::endl;
-              img_map.insert (std::pair<size_t, std::string> (img_map_counter, img_ss.str ()));
+              img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
+                    std::pair<size_t, std::string> (center_index, img_ss.str ())));
 
               approx_cluster_center[0] += leaf_center_it->x;
               approx_cluster_center[1] += leaf_center_it->y;
@@ -273,6 +277,7 @@ class ExTraReconstructedObject
                 id_x, id_y, id_z);
           }
           leaf_center_it++;
+          center_index++;
         }
 
         // ===== bin visualization =====
@@ -287,28 +292,43 @@ class ExTraReconstructedObject
           << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
         img << angle_resolution << output[i]->points.size () << std::endl;
 
-        std::multimap<size_t, std::string>::const_iterator map_it = img_map.begin ();
+        std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it = img_map.begin ();
         while (map_it != img_map.end ())
         {
-          img << map_it->second;
+          img << map_it->second.second;
           map_it++;
         }
         img.flush ();
         img.close ();
         // ===== bin visualization =====
 
-        // now iterate over the nr of detected labels in the leaves and decide which leaf should be retained
-        refined_voxel_centers->points.reserve (output[i]->points.size ());
-        refined_intersection->points.reserve (total_cluster_points);
-        for (size_t j = 0; j < leaf_clouds.size (); ++j)
+        // get the number of bin-entries of the median
+        map_it = img_map.begin ();
+        for (size_t j = 0; j < img_map.size () / 2; ++j)
         {
-          if (leaf_label_numbers[j] >= (all_labels_in_cluster.size () * 0.6f))
-          {
-            refined_voxel_centers->points.push_back (output[i]->points[j]);
-            refined_intersection->points.insert (refined_intersection->points.end (),
-                leaf_clouds[j].points.begin (), leaf_clouds[j].points.end ());
-          }
+          map_it++;
         }
+        size_t median = map_it->first;
+        float fraction = 0.9f; // TODO: make accessible
+        size_t min_bins_marked = static_cast<size_t> (fraction * median);
+        // iterate over all leaves that are to be ignored
+        map_it = img_map.begin ();
+        while (map_it->first < min_bins_marked)
+        {
+          map_it++;
+        }
+        // store all other leaves as intersection cloud and refined voxel centers
+        while (map_it != img_map. end ())
+        {
+          refined_voxel_centers->points.push_back (output[i]->points[map_it->second.first]);
+          refined_intersection->points.insert (refined_intersection->points.end (),
+              leaf_clouds[map_it->second.first].points.begin (),
+              leaf_clouds[map_it->second.first].points.end ());
+          map_it++;
+        }
+        // TODO: try mean based post-filtering instead of median
+
+
 
 /*
         // create new point cloud to hold the view point dependent intersection
