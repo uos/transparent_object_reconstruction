@@ -31,6 +31,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/Holes.h>
@@ -56,13 +57,14 @@ class HoleIntersector
       param_handle_ = ros::NodeHandle ("~");
 
       // retrieve minimal ratio of detected labels or use default parameter
-      param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
-      ROS_INFO ("Set 'min_detected_label_ratio' to %f", min_detected_label_ratio_);
+      param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
+      param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
+      param_handle_.param<int> ("min_bin_marks", min_bin_marks_, MIN_BIN_MARKS);
 
       vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
 
-      partial_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersection", 10, true);
+      intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersection", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
 
@@ -94,8 +96,10 @@ class HoleIntersector
         transparent_object_reconstruction::HoleIntersectorReset::Request req;
         transparent_object_reconstruction::HoleIntersectorReset::Response res;
         this->reset (req, res);
-        // check if a different label ration was provided
-        param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
+        // check if a different parameters were provided
+        param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
+        param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
+        param_handle_.param<int> ("min_bin_marks", min_bin_marks_, MIN_BIN_MARKS);
       }
 
       // since the view was not present so far, add it to the collection
@@ -108,7 +112,7 @@ class HoleIntersector
 
       if (!tflistener_.waitForTransform (holes->convex_hulls.front ().header.frame_id,
           tabletop_frame_,
-          holes->convex_hulls.front ().header.stamp, ros::Duration (600.0)))
+          holes->convex_hulls.front ().header.stamp, ros::Duration (10.0)))
       {
         ROS_ERROR ("Didn't retrieve a transfrom between %s and %s",
             holes->convex_hulls.front ().header.frame_id.c_str (),
@@ -126,6 +130,7 @@ class HoleIntersector
             holes->convex_hulls[0].header.frame_id,
             holes->convex_hulls[0].header.stamp,
             tf_transform);
+            current_yaw_ = tf::getYaw (tf_transform.getRotation ());
       }
       catch (tf::TransformException &ex)
       {
@@ -165,7 +170,25 @@ class HoleIntersector
       }
 
       // retrieve the label for the new points
-      uint32_t current_label = transformed_holes_.size ();
+      // compute the current label from the used orientation
+      double yaw_in_degrees = pcl::rad2deg (current_yaw_);
+      while (yaw_in_degrees < 0.0f)
+      {
+        yaw_in_degrees += 360.0f;
+      }
+      // scale to desired resolution
+      uint32_t current_label = static_cast<uint32_t> (yaw_in_degrees * 360.0f / angle_resolution_);
+      all_labels_.insert (current_label);
+
+      std::set<uint32_t>::const_iterator label_it = all_labels_.begin ();
+      std::cout  << "all_labels: ";
+      while (label_it != all_labels_.end ())
+      {
+        std::cout << *label_it << " ";
+        label_it++;
+      }
+      std::cout << std::endl;
+
       // convert the tf transform to Eigen...
       Eigen::Affine3d hole_to_tabletop;
       tf::transformTFToEigen (tf_transform, hole_to_tabletop);
@@ -359,6 +382,7 @@ class HoleIntersector
       size_t nr_leaves, filled_leaves, intersec_leaves;
       nr_leaves = filled_leaves = intersec_leaves = 0;
       Eigen::Vector3f min, max, center;
+      Eigen::Vector3d center_double;
       geometry_msgs::Point voxel_center;
       while (leaf_it != octree_->leaf_end ())
       {
@@ -381,35 +405,26 @@ class HoleIntersector
           octree_->getVoxelBounds (leaf_it, min, max);
           center = min + max;
           center /= 2.0f;
-          voxel_center.x = center[0];
-          voxel_center.y = center[1];
-          voxel_center.z = center[2];
+          // transform center from tabletop to map frame
+          center_double = Eigen::Vector3d (center[0], center[1], center[2]);
+          center_double = table_to_map_transform_ * center_double;
+          voxel_center.x = center_double[0];
+          voxel_center.y = center_double[1];
+          voxel_center.z = center_double[2];
 
           size_t nr_detected_labels;
           bool detected_fraction;
-          if (isLeafInIntersection (*leaf_cloud, available_labels_, nr_detected_labels))
+          size_t view_count;
+          if (isLeafInIntersectionViewPoint (*leaf_cloud, view_count))
           {
             intersec_marker_.points.push_back (voxel_center);
             intersec_leaves++;
-            p_it = leaf_cloud->points.begin ();
-            while (p_it != leaf_cloud->points.end ())
-            {
-              intersec_cloud_->points.push_back (*p_it++);
-            }
+            intersec_cloud_->points.insert (intersec_cloud_->points.end (),
+                leaf_cloud->points.begin (), leaf_cloud->points.end ());
           }
           else
           {
             non_intersec_marker_.points.push_back (voxel_center);
-
-            // check if the minimal ratio of labels was detected
-            if (static_cast<float> (nr_detected_labels) / static_cast<float> (available_labels_.size ()) > min_detected_label_ratio_)
-            {
-              p_it = leaf_cloud->points.begin ();
-              while (p_it != leaf_cloud->points.end ())
-              {
-                intersec_cloud_->points.push_back (*p_it++);
-              }
-            }
           }
         }
         leaf_it++;
@@ -445,12 +460,12 @@ class HoleIntersector
           pcl_conversions::toPCL (header, tmp_cloud->header);
 
           // publish
-          partial_intersec_pub_.publish (tmp_cloud);
+          intersec_pub_.publish (tmp_cloud);
         }
         else
         {
           // publish
-          partial_intersec_pub_.publish (intersec_cloud_);
+          intersec_pub_.publish (intersec_cloud_);
         }
       }
     };
@@ -458,9 +473,11 @@ class HoleIntersector
     void publish_markers (void)
     {
       intersec_marker_.header.stamp = ros::Time::now ();
-      intersec_marker_.header.frame_id = tabletop_frame_;
       non_intersec_marker_.header.stamp = ros::Time::now ();
-      non_intersec_marker_.header.frame_id = tabletop_frame_;
+      // set frame_id of markers to map frame
+      intersec_marker_.header.frame_id = map_frame_;
+      non_intersec_marker_.header.frame_id = map_frame_;
+
       // publish visualization marker
       visualization_msgs::MarkerArray vis_marker_array;
       vis_marker_array.markers.push_back (intersec_marker_);
@@ -561,9 +578,16 @@ class HoleIntersector
     float octree_resolution_;
     std::string tabletop_frame_;
     std::string map_frame_;
-    float min_detected_label_ratio_;
+
+    double current_yaw_;
+    int angle_resolution_;
+    int opening_angle_;
+    int min_bin_marks_;
+
     Eigen::Affine3d table_to_map_transform_;
     tf::StampedTransform table_to_map_;
+
+    std::set<uint32_t> all_labels_;
 
     void setUpVisMarkers (void)
     {
@@ -610,8 +634,6 @@ class HoleIntersector
       // DELETEALL is not officially around before jade, addressed it by value
       clear_marker.action = 3;
       clear_marker_array_.markers.push_back (clear_marker);
-
-
     };
 
   protected:
@@ -620,7 +642,7 @@ class HoleIntersector
     ros::Subscriber hole_sub_;
     
     ros::Publisher vis_pub_;
-    ros::Publisher partial_intersec_pub_;
+    ros::Publisher intersec_pub_;
     ros::Publisher all_frusta_pub_;
 
     ros::ServiceServer reset_service_;
@@ -704,6 +726,96 @@ class HoleIntersector
       return false;
     };
 
+    bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud,
+        size_t &view_count)
+    {
+      // check if number of points is sufficient
+      if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
+      {
+        return false;
+      }
+      // gather all labels in the point cloud
+      std::set<uint32_t> leaf_labels;
+      LabelCloud::VectorType::const_iterator p_it = leaf_cloud.points.begin ();
+      while (p_it != leaf_cloud.points.end ())
+      {
+        leaf_labels.insert (p_it->label);
+        p_it++;
+      }
+
+      // now generate the viewpoint marker array from the detected labels
+      std::vector<uint8_t> viewpoint_marker (angle_resolution_, 0);
+      std::set<uint32_t>::const_iterator label_it = leaf_labels.begin ();
+      while (label_it != leaf_labels.end ())
+      {
+        for (int i = -opening_angle_; i <= opening_angle_; ++i)
+        {
+          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = 1;
+        }
+        label_it++;
+      }
+
+      // gather the number of marks in the viewpoint marker
+      view_count = 0;
+      std::vector<uint8_t>::const_iterator marker_it = viewpoint_marker.begin ();
+      while (marker_it != viewpoint_marker.end ())
+      {
+        view_count += *marker_it++;
+      }
+      if (view_count >= min_bin_marks_)
+      {
+        return true;
+      }
+
+      return false;
+    };
+
+    bool isLeafInIntersectionViewPoint2 (const LabelCloud &leaf_cloud,
+        size_t &view_count)
+    {
+      // check if number of points is sufficient
+      if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
+      {
+        return false;
+      }
+      // gather all labels in the point cloud
+      std::vector<uint32_t> leaf_labels (leaf_cloud.points.size ());
+      for (size_t i = 0; i < leaf_cloud.points.size (); ++i)
+      {
+        leaf_labels[i] = leaf_cloud.points[i].label;
+      }
+      std::sort (leaf_labels.begin (), leaf_labels.end ());
+      std::vector<uint32_t>::iterator last_label = std::unique (leaf_labels.begin (), leaf_labels.end ());
+
+      // now generate the viewpoint marker array from the detected labels
+      std::vector<bool> viewpoint_marker (angle_resolution_, false);
+      std::vector<uint32_t>::const_iterator label_it = leaf_labels.begin ();
+      while (label_it != last_label)
+      {
+        for (int i = -opening_angle_; i <= opening_angle_; ++i)
+        {
+          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = true;
+        }
+        label_it++;
+      }
+
+      // gather the number of marks in the viewpoint marker
+      view_count = 0;
+      std::vector<bool>::const_iterator marker_it = viewpoint_marker.begin ();
+      while (marker_it != viewpoint_marker.end ())
+      {
+        if (*marker_it++)
+        {
+          view_count++;
+        }
+      }
+      if (view_count >= min_bin_marks_)
+      {
+        return true;
+      }
+
+      return false;
+    };
 };
 
 int main (int argc, char **argv)
