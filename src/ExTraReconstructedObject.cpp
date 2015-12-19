@@ -30,6 +30,8 @@
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/tools.h>
 
+#include <bag_loop_check/bag_loop_check.hpp>
+
 #include <map>
 #include <iostream>
 #include <limits>
@@ -46,6 +48,13 @@ class ExTraReconstructedObject
       min_cluster_size_ (min_cluster_size),
       max_cluster_size_ (max_cluster_size)
     {
+      param_handle_ = ros::NodeHandle ("~");
+
+      // retrieve minimal ratio of detected labels or use default parameter
+      param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
+      param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
+      param_handle_.param<float> ("median_fraction", median_fraction_, MEDIAN_FRACTION);
+
       voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/voxelized_intersection", 10, true);
 
       refined_voxel_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/refined_voxel", 10, true);
@@ -71,6 +80,15 @@ class ExTraReconstructedObject
       ROS_INFO ("received intersection cloud with %lu points", cloud->points.size ());
 
       static int call_counter = 0;
+
+      // check for bag loop
+      static bag_loop_check::BagLoopCheck bagloop;
+      if (bagloop)
+      {
+        param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
+        param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
+        param_handle_.param<float> ("median_fraction", median_fraction_, MEDIAN_FRACTION);
+      }
 
       // clear old marker
       pcl_conversions::fromPCL (cloud->header, clear_marker_array_.markers.front ().header);
@@ -199,8 +217,6 @@ class ExTraReconstructedObject
         // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
         // number of bin entries
         std::multimap<size_t, std::pair<size_t, std::string> > img_map;
-        int angle_resolution = 360;   // TODO: read in as parameters
-        int opening_angle = 20;
         // ===== bin visualization =====
 
         size_t center_index = 0;
@@ -232,13 +248,13 @@ class ExTraReconstructedObject
               }
 
               // ===== bin visualization =====
-              std::vector<uint8_t> view_bin_marker (angle_resolution, 0);
+              std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
               LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
               while (marker_it != leaf_cloud->points.end ())
               {
-                for (int k = -opening_angle; k <= opening_angle; ++k)
+                for (int k = -opening_angle_; k <= opening_angle_; ++k)
                 {
-                  view_bin_marker[(marker_it->label + k + angle_resolution) % angle_resolution] = 1;
+                  view_bin_marker[(marker_it->label + k + angle_resolution_) % angle_resolution_] = 1;
                 }
                 marker_it++;
               }
@@ -290,7 +306,7 @@ class ExTraReconstructedObject
         img << std::endl;
         img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
           << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
-        img << angle_resolution << output[i]->points.size () << std::endl;
+        img << angle_resolution_ << output[i]->points.size () << std::endl;
 
         std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it = img_map.begin ();
         while (map_it != img_map.end ())
@@ -309,11 +325,10 @@ class ExTraReconstructedObject
           map_it++;
         }
         size_t median = map_it->first;
-        float fraction = 0.9f; // TODO: make accessible
-        size_t min_bins_marked = static_cast<size_t> (fraction * median);
+        size_t median_bin_threshold = static_cast<size_t> (median_fraction_ * median);
         // iterate over all leaves that are to be ignored
         map_it = img_map.begin ();
-        while (map_it->first < min_bins_marked)
+        while (map_it->first < median_bin_threshold)
         {
           map_it++;
         }
@@ -415,6 +430,7 @@ class ExTraReconstructedObject
 
   protected:
     ros::NodeHandle nhandle_;
+    ros::NodeHandle param_handle_;
     ros::Subscriber intersec_sub_;
 
     ros::Publisher voxel_cloud_pub_;
@@ -433,6 +449,10 @@ class ExTraReconstructedObject
     float cluster_tolerance_;
     size_t min_cluster_size_;
     size_t max_cluster_size_;
+    // parameters for intersection computation in the individual clusters
+    int angle_resolution_;
+    int opening_angle_;
+    float median_fraction_;
 
     void setUpVisMarker (void)
     {

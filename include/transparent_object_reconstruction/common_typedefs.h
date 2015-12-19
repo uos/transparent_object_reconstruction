@@ -14,4 +14,11 @@ typedef pcl::PointCloud<LabelPoint> LabelCloud;
 typedef LabelCloud::Ptr LabelCloudPtr;
 typedef LabelCloud::ConstPtr ConstLabelCloudPtr;
 
+static const int ANGLE_RESOLUTION = 360;
+static const int OPENING_ANGLE = 20;
+static const int MIN_BIN_MARKS = 120;
+
+static const float MEDIAN_FRACTION = 1.0f;
+
+
 #endif // TRANSP_OBJ_RECON_COMMON_DEFS

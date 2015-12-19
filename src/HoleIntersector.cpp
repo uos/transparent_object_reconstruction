@@ -57,8 +57,9 @@ class HoleIntersector
       param_handle_ = ros::NodeHandle ("~");
 
       // retrieve minimal ratio of detected labels or use default parameter
-      param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
-      ROS_INFO ("Set 'min_detected_label_ratio' to %f", min_detected_label_ratio_);
+      param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
+      param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
+      param_handle_.param<int> ("min_bin_marks", min_bin_marks_, MIN_BIN_MARKS);
 
       vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/intersec_visualization", 10, true);
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
@@ -72,11 +73,6 @@ class HoleIntersector
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
-
-      // TODO: make accessible via parameter
-      angle_resolution_ = 360;
-      opening_angle_ = 20;
-      min_view_count_ = 120;
 
     };
 
@@ -100,8 +96,10 @@ class HoleIntersector
         transparent_object_reconstruction::HoleIntersectorReset::Request req;
         transparent_object_reconstruction::HoleIntersectorReset::Response res;
         this->reset (req, res);
-        // check if a different label ration was provided
-        param_handle_.param<float> ("min_detected_label_ratio", min_detected_label_ratio_, 0.5f);
+        // check if a different parameters were provided
+        param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
+        param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
+        param_handle_.param<int> ("min_bin_marks", min_bin_marks_, MIN_BIN_MARKS);
       }
 
       // since the view was not present so far, add it to the collection
@@ -580,12 +578,11 @@ class HoleIntersector
     float octree_resolution_;
     std::string tabletop_frame_;
     std::string map_frame_;
-    float min_detected_label_ratio_;
 
     double current_yaw_;
     int angle_resolution_;
     int opening_angle_;
-    int min_view_count_;
+    int min_bin_marks_;
 
     Eigen::Affine3d table_to_map_transform_;
     tf::StampedTransform table_to_map_;
@@ -733,7 +730,7 @@ class HoleIntersector
         size_t &view_count)
     {
       // check if number of points is sufficient
-      if (leaf_cloud.points.size () < (min_view_count_ / opening_angle_))
+      if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
       {
         return false;
       }
@@ -765,7 +762,7 @@ class HoleIntersector
       {
         view_count += *marker_it++;
       }
-      if (view_count >= min_view_count_)
+      if (view_count >= min_bin_marks_)
       {
         return true;
       }
@@ -777,7 +774,7 @@ class HoleIntersector
         size_t &view_count)
     {
       // check if number of points is sufficient
-      if (leaf_cloud.points.size () < (min_view_count_ / opening_angle_))
+      if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
       {
         return false;
       }
@@ -812,7 +809,7 @@ class HoleIntersector
           view_count++;
         }
       }
-      if (view_count >= min_view_count_)
+      if (view_count >= min_bin_marks_)
       {
         return true;
       }
