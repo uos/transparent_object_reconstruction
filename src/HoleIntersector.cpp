@@ -102,6 +102,9 @@ class HoleIntersector
         param_handle_.param<int> ("min_bin_marks", min_bin_marks_, MIN_BIN_MARKS);
       }
 
+      ROS_DEBUG ("INTERSECTOR-callback params: angle_resolution_ %i, opening_angle_ %i, min_bin_marks_ %i",
+          angle_resolution_, opening_angle_, min_bin_marks_);
+
       // since the view was not present so far, add it to the collection
       collected_views_.push_back (holes->convex_hulls.front ().header);
       

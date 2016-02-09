@@ -90,6 +90,8 @@ class ExTraReconstructedObject
         param_handle_.param<float> ("median_fraction", median_fraction_, MEDIAN_FRACTION);
       }
 
+      ROS_DEBUG ("ExTra-callback params: angle_resolution_ %i, opening_angle_ %i, median_fraction_ %f", angle_resolution_, opening_angle_, median_fraction_);
+
       // clear old marker
       pcl_conversions::fromPCL (cloud->header, clear_marker_array_.markers.front ().header);
       all_hulls_vis_pub_.publish (clear_marker_array_);
