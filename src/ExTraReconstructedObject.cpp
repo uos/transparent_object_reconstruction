@@ -260,16 +260,16 @@ class ExTraReconstructedObject
                 }
                 marker_it++;
               }
-              std::stringstream img_ss;
+              std::stringstream img_line_ss;
               size_t img_map_counter = 0;
               for (size_t k = 0; k < view_bin_marker.size (); ++k)
               {
-                img_ss << view_bin_marker[k] << " ";
+                img_line_ss << static_cast<int> (view_bin_marker[k]) << " ";
                 img_map_counter += view_bin_marker[k];
               }
-              img_ss << std::endl;
+              img_line_ss << std::endl;
               img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
-                    std::pair<size_t, std::string> (center_index, img_ss.str ())));
+                    std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
 
               approx_cluster_center[0] += leaf_center_it->x;
               approx_cluster_center[1] += leaf_center_it->y;
@@ -308,7 +308,7 @@ class ExTraReconstructedObject
         img << std::endl;
         img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
           << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
-        img << angle_resolution_ << output[i]->points.size () << std::endl;
+        img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
 
         std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it = img_map.begin ();
         while (map_it != img_map.end ())
