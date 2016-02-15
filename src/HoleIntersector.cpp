@@ -457,8 +457,7 @@ class HoleIntersector
 
           size_t nr_detected_labels;
           bool detected_fraction;
-          size_t view_count;
-          if (isLeafInIntersectionViewPoint (*leaf_cloud, view_count))
+          if (isLeafInIntersectionViewPoint (*leaf_cloud))
           {
             intersec_marker_.points.push_back (voxel_center);
             intersec_leaves++;
@@ -776,8 +775,15 @@ class HoleIntersector
       return false;
     };
 
-    bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud,
-        size_t &view_count)
+    /* Determines if an octree leaf (represented by its points) is possibly part
+     * of a transparent object, depending on the available labels in the leaf.
+     * Labels have to encode the viewing angle between the cameras viewing
+     * direction and the coordinate frame of the tabletop.
+     *
+     * @param[in] leaf_cloud The points that represent the current octree leaf
+     * @returns true, if the leaf is considered part of a transparent object, false otherwise
+     */
+    bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud)
     {
       // check if number of points is sufficient
       if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
