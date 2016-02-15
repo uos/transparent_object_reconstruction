@@ -29,6 +29,10 @@
 #include <pcl/octree/octree_impl.h>
 #include <pcl/octree/octree_iterator.h>
 
+// boost interval stuff for alternative implementation of viewpoint overlap based reconstruction...
+#include <boost/icl/interval_set.hpp>
+#include <boost/icl/discrete_interval.hpp>
+
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
@@ -789,30 +793,41 @@ class HoleIntersector
         p_it++;
       }
 
-      // now generate the viewpoint marker array from the detected labels
-      std::vector<uint8_t> viewpoint_marker (angle_resolution_, 0);
+      // now generate the viewpoint marker array from the detected labels using intervals
+      boost::icl::interval_set<int> accumulated_viewpoints;
       std::set<uint32_t>::const_iterator label_it = leaf_labels.begin ();
       while (label_it != leaf_labels.end ())
       {
-        for (int i = -opening_angle_; i <= opening_angle_; ++i)
+        // compute interval limits
+        int lower_bound, upper_bound;
+        lower_bound = static_cast<int> (*label_it) - opening_angle_;
+        upper_bound = static_cast<int> (*label_it) + opening_angle_;
+        if (0 <= lower_bound && upper_bound < angle_resolution_)
         {
-          viewpoint_marker[(*label_it + i + angle_resolution_) % angle_resolution_] = 1;
+          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> > (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
+        }
+        else if (lower_bound < 0)
+        {
+          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+              (0, upper_bound, boost::icl::interval_bounds::closed ()));
+          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+              (angle_resolution_ + lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
+        }
+        else    // upper bound > angle_resolution_
+        {
+          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+              (0, upper_bound - angle_resolution_, boost::icl::interval_bounds::closed ()));
+          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+              (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
         }
         label_it++;
       }
 
       // gather the number of marks in the viewpoint marker
-      view_count = 0;
-      std::vector<uint8_t>::const_iterator marker_it = viewpoint_marker.begin ();
-      while (marker_it != viewpoint_marker.end ())
-      {
-        view_count += *marker_it++;
-      }
-      if (view_count >= min_bin_marks_)
+      if (accumulated_viewpoints.size () >= min_bin_marks_)
       {
         return true;
       }
-
       return false;
     };
 
