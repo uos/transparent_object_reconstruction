@@ -796,31 +796,40 @@ class HoleIntersector
       // now generate the viewpoint marker array from the detected labels using intervals
       boost::icl::interval_set<int> accumulated_viewpoints;
       std::set<uint32_t>::const_iterator label_it = leaf_labels.begin ();
+      int lower_bound, upper_bound;
       while (label_it != leaf_labels.end ())
       {
         // compute interval limits
-        int lower_bound, upper_bound;
         lower_bound = static_cast<int> (*label_it) - opening_angle_;
         upper_bound = static_cast<int> (*label_it) + opening_angle_;
-        if (0 <= lower_bound && upper_bound < angle_resolution_)
-        {
-          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> > (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
-        }
-        else if (lower_bound < 0)
-        {
-          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-              (0, upper_bound, boost::icl::interval_bounds::closed ()));
-          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-              (angle_resolution_ + lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
-        }
-        else    // upper bound > angle_resolution_
-        {
-          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-              (0, upper_bound - angle_resolution_, boost::icl::interval_bounds::closed ()));
-          accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-              (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
-        }
+        // add one interval (negative lower bound or upper bound larger than angle_resolution_ are allowed)
+        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+            (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
         label_it++;
+      }
+
+      // check if intervals in set need to be normalized
+      if (accumulated_viewpoints.begin ()->lower () < 0)
+      {
+        lower_bound = accumulated_viewpoints.begin ()->lower ();
+        upper_bound = accumulated_viewpoints.begin ()->upper ();
+        accumulated_viewpoints.erase (accumulated_viewpoints.begin ());
+        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+            (0, upper_bound, boost::icl::interval_bounds::closed ()));
+        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+            (angle_resolution_ + lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
+      }
+      boost::icl::interval_set<int>::iterator last_element = accumulated_viewpoints.end ();
+      last_element--;
+      if (last_element->upper () >= angle_resolution_)
+      {
+        lower_bound = last_element->lower ();
+        upper_bound = last_element->upper ();
+        accumulated_viewpoints.erase (last_element);
+        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+            (0, upper_bound - angle_resolution_, boost::icl::interval_bounds::closed ()));
+        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+            (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
       }
 
       // gather the number of marks in the viewpoint marker
