@@ -2008,3 +2008,46 @@ void storeAsImage (const std::vector<std::vector<Eigen::Vector3i> > &img_data, c
   img_file.flush ();
   img_file.close ();
 }
+
+transparent_object_reconstruction::ViewpointInterval
+convertICLInterval2ViewpointInterval (const boost::icl::discrete_interval<int> &icl_interval)
+{
+  transparent_object_reconstruction::ViewpointInterval vpi;
+  vpi.lower = icl_interval.lower ();
+  vpi.upper = icl_interval.upper ();
+  return vpi;
+}
+
+boost::icl::discrete_interval<int>
+convertViewpointInterval2ICLInterval (const transparent_object_reconstruction::ViewpointInterval &vpi)
+{
+  return boost::icl::construct<boost::icl::discrete_interval<int> >
+    (vpi.lower, vpi.upper, boost::icl::interval_bounds::closed ());
+}
+
+void
+convertICLIntervalSet2VoxelViewpointIntervals (const boost::icl::interval_set<int> &icl_interval_set,
+    transparent_object_reconstruction::VoxelViewPointIntervals &voxel_vp_intervals)
+{
+  voxel_vp_intervals.intervals.clear ();
+  voxel_vp_intervals.intervals.reserve (icl_interval_set.iterative_size ());
+  boost::icl::interval_set<int>::const_iterator interval_it = icl_interval_set.begin ();
+  while (interval_it != icl_interval_set.end ())
+  {
+    voxel_vp_intervals.intervals.push_back (convertICLInterval2ViewpointInterval (*interval_it));
+    interval_it++;
+  }
+}
+
+void
+convertVoxelViewpointIntervals2ICLIntervalSet (const transparent_object_reconstruction::VoxelViewPointIntervals &voxel_vp_intervals,
+    boost::icl::interval_set<int> &icl_interval_set)
+{
+  icl_interval_set.clear ();
+  std::vector<transparent_object_reconstruction::ViewpointInterval>::const_iterator interval_it = voxel_vp_intervals.intervals.begin ();
+  while (interval_it != voxel_vp_intervals.intervals.end ())
+  {
+    icl_interval_set.insert (convertViewpointInterval2ICLInterval (*interval_it));
+    interval_it++;
+  }
+}

@@ -66,6 +66,7 @@ include_directories(include ${catkin_INCLUDE_DIRS})
 # Libraries
 add_library(tools src/tools.cpp)
 target_link_libraries(tools ${catkin_LIBRARIES})
+add_dependencies(tools ${PROJECT_NAME}_generate_messages_cpp)
 
 # Executables
 add_executable(HoleVisualizer src/HoleVisualizer.cpp)

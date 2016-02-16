@@ -24,6 +24,9 @@
 
 #include <pcl/surface/concave_hull.h>
 
+#include <boost/icl/interval_set.hpp>
+#include <boost/icl/discrete_interval.hpp>
+
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -32,6 +35,9 @@
 #include <algorithm>
 
 #include <transparent_object_reconstruction/common_typedefs.h>
+#include <transparent_object_reconstruction/ViewpointInterval.h>
+#include <transparent_object_reconstruction/VoxelViewPointIntervals.h>
+
 
 // collection of methods used to transform point clouds into x-y-plane etc. pp.
 typedef pcl::ModelCoefficients Model;
@@ -1452,5 +1458,15 @@ getOctreeIndices (const Eigen::Vector3d &min_bbox, const PointT &lp, float octre
   id_y = static_cast<int> ((lp.y - min_bbox[1]) / octree_res);
   id_z = static_cast<int> ((lp.z - min_bbox[2]) / octree_res);
 }
+
+transparent_object_reconstruction::ViewpointInterval
+convertICLInterval2ViewpointInterval (const boost::icl::discrete_interval<int> &icl_interval);
+
+boost::icl::discrete_interval<int>
+convertViewpointInterval2ICLInterval (const transparent_object_reconstruction::ViewpointInterval &vpi);
+
+void
+convertICLIntervalSet2VoxelViewpointIntervals (const boost::icl::interval_set<int> &icl_interval_set,
+    transparent_object_reconstruction::VoxelViewPointIntervals &voxel_vp_intervals);
 
 #endif // TRANSP_OBJ_RECON_TOOLS
