@@ -2051,3 +2051,34 @@ convertVoxelViewpointIntervals2ICLIntervalSet (const transparent_object_reconstr
     interval_it++;
   }
 }
+
+void
+convertICLIntervalSetVector2VoxelViewpointIntervalVector (const std::vector<boost::icl::interval_set<int> > &icl_interval_vector,
+    std::vector<transparent_object_reconstruction::VoxelViewPointIntervals> &voxel_vp_interval_vec)
+{
+  voxel_vp_interval_vec.resize (icl_interval_vector.size ());
+  for (size_t i = 0; i < icl_interval_vector.size (); ++i)
+  {
+    convertICLIntervalSet2VoxelViewpointIntervals (icl_interval_vector[i], voxel_vp_interval_vec[i]);
+  }
+}
+
+void
+convertLabelVector2VoxelLabels (const std::vector<uint32_t> &v_labels,
+    transparent_object_reconstruction::VoxelLabels &voxel_labels)
+{
+  voxel_labels.labels.clear ();
+  voxel_labels.labels.reserve (v_labels.size ());
+  voxel_labels.labels.insert (voxel_labels.labels.end (), v_labels.begin (), v_labels.end ());
+}
+
+void
+convertLabelVectorCollection2VoxelLabelCollection (const std::vector<std::vector<uint32_t> > &vlc,
+    std::vector<transparent_object_reconstruction::VoxelLabels> &voxel_label_collection)
+{
+  voxel_label_collection.resize (vlc.size ());
+  for (size_t i = 0; i < vlc.size (); ++i)
+  {
+    convertLabelVector2VoxelLabels (vlc[i], voxel_label_collection[i]);
+  }
+}

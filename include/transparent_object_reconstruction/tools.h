@@ -37,7 +37,7 @@
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/ViewpointInterval.h>
 #include <transparent_object_reconstruction/VoxelViewPointIntervals.h>
-
+#include <transparent_object_reconstruction/VoxelLabels.h>
 
 // collection of methods used to transform point clouds into x-y-plane etc. pp.
 typedef pcl::ModelCoefficients Model;
@@ -1468,5 +1468,21 @@ convertViewpointInterval2ICLInterval (const transparent_object_reconstruction::V
 void
 convertICLIntervalSet2VoxelViewpointIntervals (const boost::icl::interval_set<int> &icl_interval_set,
     transparent_object_reconstruction::VoxelViewPointIntervals &voxel_vp_intervals);
+
+void
+convertVoxelViewpointIntervals2ICLIntervalSet (const transparent_object_reconstruction::VoxelViewPointIntervals &voxel_vp_intervals,
+    boost::icl::interval_set<int> &icl_interval_set);
+
+void
+convertICLIntervalSetVector2VoxelViewpointIntervalVector (const std::vector<boost::icl::interval_set<int> > &icl_interval_vector,
+    std::vector<transparent_object_reconstruction::VoxelViewPointIntervals> &voxel_vp_interval_vec);
+
+void
+convertLabelVector2VoxelLabels (const std::vector<uint32_t> &v_labels,
+    transparent_object_reconstruction::VoxelLabels &voxel_labels);
+
+void
+convertLabelVectorCollection2VoxelLabelCollection (const std::vector<std::vector<uint32_t> > &vlc,
+    std::vector<transparent_object_reconstruction::VoxelLabels> &voxel_label_collection);
 
 #endif // TRANSP_OBJ_RECON_TOOLS
