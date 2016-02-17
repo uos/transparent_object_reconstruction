@@ -42,6 +42,11 @@
 #include <transparent_object_reconstruction/tools.h>
 #include <transparent_object_reconstruction/HoleIntersectorReset.h>
 
+#include <transparent_object_reconstruction/ViewpointInterval.h>
+#include <transparent_object_reconstruction/VoxelViewPointIntervals.h>
+#include <transparent_object_reconstruction/VoxelizedTransObjInfo.h>
+#include <transparent_object_reconstruction/VoxelLabels.h>
+
 #include <bag_loop_check/bag_loop_check.hpp>
 
 typedef pcl::octree::OctreePointCloud<LabelPoint> LabelOctree;
@@ -69,6 +74,9 @@ class HoleIntersector
       all_frusta_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray>( "transObjRec/frusta_visualization", 10, true);
 
       intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersection", 10, true);
+
+      trans_obj_info_pub_ = nhandle_.advertise<transparent_object_reconstruction::VoxelizedTransObjInfo>
+        ("transObjRec/voxelized_info", 10, true);
 
       reset_service_ = nhandle_.advertiseService ("transObjRec/HoleIntersector_reset", &HoleIntersector::reset, this);
 
@@ -475,8 +483,8 @@ class HoleIntersector
                 leaf_cloud->points.begin (), leaf_cloud->points.end ());
 
             // add voxel_center to voxelized_intersec_cloud_
-            voxelized_intersec_cloud_->points.push_back (LabelPoint (voxel_center.x, voxel_center.y,
-                  voxel_center.z, acc_vp_intervals.size ()));
+            voxelized_intersec_cloud_->points.push_back (convert<LabelPoint, Eigen::Vector3f> (center));
+            voxelized_intersec_cloud_->points.rbegin ()->label = acc_vp_intervals.size ();
             voxel_labels_.push_back (leaf_labels_vec);
             voxel_vp_intervals_.push_back (acc_vp_intervals);
           }
@@ -508,6 +516,15 @@ class HoleIntersector
         // set width and height of cloud
         intersec_cloud_->height = 1;
         intersec_cloud_->width = intersec_cloud_->points.size ();
+        // set width and height for voxelized cloud
+        voxelized_intersec_cloud_->height = 1;
+        voxelized_intersec_cloud_->width = voxelized_intersec_cloud_->points.size ();
+
+        // create the new message...
+        transparent_object_reconstruction::VoxelizedTransObjInfo trans_obj_info;
+
+        // create temporary PCLPointCloud2 for conversion to ros::sensor_msgs::PointCloud2
+        pcl::PCLPointCloud2 tmp_PCLPC2;
 
         if (map_frame_.compare (tabletop_frame_) != 0)
         {
@@ -519,12 +536,36 @@ class HoleIntersector
 
           // publish
           intersec_pub_.publish (tmp_cloud);
+
+          LabelCloudPtr tmp_voxel_centers (new LabelCloud);
+          // transform in map frame
+          pcl::transformPointCloud (*voxelized_intersec_cloud_, *tmp_voxel_centers, table_to_map_transform_);
+          // convert transformed voxel centers to PCLPointCloud2
+          pcl::toPCLPointCloud2<LabelPoint> (*tmp_voxel_centers, tmp_PCLPC2);
         }
         else
         {
+          ROS_INFO ("MUAHAHAHAA");
           // publish
           intersec_pub_.publish (intersec_cloud_);
+
+          // convert voxel centers to PCLPointCloud2
+          pcl::toPCLPointCloud2<LabelPoint> (*voxelized_intersec_cloud_, tmp_PCLPC2);
         }
+        // convert to sensor_msgs::PointCloud2
+        pcl_conversions::moveFromPCL (tmp_PCLPC2, trans_obj_info.voxel_centers);
+        // set header information
+        trans_obj_info.voxel_centers.header = header;
+
+        // set labels for all voxels
+        convertLabelVectorCollection2VoxelLabelCollection (voxel_labels_, trans_obj_info.voxel_labels);
+
+        // set intervals for all voxels
+        convertICLIntervalSetVector2VoxelViewpointIntervalVector (voxel_vp_intervals_,
+            trans_obj_info.voxel_intervals);
+
+        // publish the new message
+        trans_obj_info_pub_.publish (trans_obj_info);
       }
     };
 
@@ -709,6 +750,7 @@ class HoleIntersector
     ros::Publisher vis_pub_;
     ros::Publisher intersec_pub_;
     ros::Publisher all_frusta_pub_;
+    ros::Publisher trans_obj_info_pub_;
 
     ros::ServiceServer reset_service_;
 
