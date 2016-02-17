@@ -77,6 +77,7 @@ class HoleIntersector
       octree_.reset (new LabelOctree (octree_resolution_));
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
+      voxelized_intersec_cloud_ = boost::make_shared<LabelCloud> ();
 
       // indicate that reference bounding box for octree isn't set yet
       reference_bb_set_ = false;
@@ -420,6 +421,14 @@ class HoleIntersector
       intersec_marker_.points.reserve (leaf_centers.size ());
       non_intersec_marker_.points.reserve (leaf_centers.size ());
 
+      // prepare storage for additional outputs
+      voxelized_intersec_cloud_->points.clear ();
+      voxel_labels_.clear ();
+      voxel_vp_intervals_.clear ();
+      voxelized_intersec_cloud_->points.reserve (leaf_centers.size ());
+      voxel_labels_.reserve (leaf_centers.size ());
+      voxel_vp_intervals_.reserve (leaf_centers.size ());
+
       // iterate over all leaves to check which belongs to the intersection
       intersec_cloud_->points.reserve (all_frusta_->points.size ());
       size_t nr_leaves, filled_leaves, intersec_leaves;
@@ -464,6 +473,12 @@ class HoleIntersector
             intersec_leaves++;
             intersec_cloud_->points.insert (intersec_cloud_->points.end (),
                 leaf_cloud->points.begin (), leaf_cloud->points.end ());
+
+            // add voxel_center to voxelized_intersec_cloud_
+            voxelized_intersec_cloud_->points.push_back (LabelPoint (voxel_center.x, voxel_center.y,
+                  voxel_center.z, acc_vp_intervals.size ()));
+            voxel_labels_.push_back (leaf_labels_vec);
+            voxel_vp_intervals_.push_back (acc_vp_intervals);
           }
           else
           {
@@ -703,6 +718,9 @@ class HoleIntersector
 
     LabelCloudPtr all_frusta_;
     LabelCloudPtr intersec_cloud_;
+    LabelCloudPtr voxelized_intersec_cloud_;
+    std::vector<std::vector<uint32_t> > voxel_labels_;
+    std::vector<boost::icl::interval_set<int> > voxel_vp_intervals_;
 
     std::set<uint32_t> available_labels_;
     std::vector<std_msgs::Header> collected_views_;
