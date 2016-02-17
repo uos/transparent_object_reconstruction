@@ -455,9 +455,10 @@ class HoleIntersector
           voxel_center.y = center_double[1];
           voxel_center.z = center_double[2];
 
-          size_t nr_detected_labels;
           bool detected_fraction;
-          if (isLeafInIntersectionViewPoint (*leaf_cloud))
+          std::vector<uint32_t> leaf_labels_vec;
+          boost::icl::interval_set<int> acc_vp_intervals;
+          if (isLeafInIntersectionViewPoint (*leaf_cloud, leaf_labels_vec, acc_vp_intervals))
           {
             intersec_marker_.points.push_back (voxel_center);
             intersec_leaves++;
@@ -783,13 +784,19 @@ class HoleIntersector
      * @param[in] leaf_cloud The points that represent the current octree leaf
      * @returns true, if the leaf is considered part of a transparent object, false otherwise
      */
-    bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud)
+    bool isLeafInIntersectionViewPoint (const LabelCloud &leaf_cloud,
+        std::vector<uint32_t> &leaf_labels_vec,
+        boost::icl::interval_set<int> &acc_vp_intervals)
     {
       // check if number of points is sufficient
       if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
       {
         return false;
       }
+
+      // clear output argument
+      acc_vp_intervals.clear ();
+
       // gather all labels in the point cloud
       std::set<uint32_t> leaf_labels;
       LabelCloud::VectorType::const_iterator p_it = leaf_cloud.points.begin ();
@@ -800,7 +807,6 @@ class HoleIntersector
       }
 
       // now generate the viewpoint marker array from the detected labels using intervals
-      boost::icl::interval_set<int> accumulated_viewpoints;
       std::set<uint32_t>::const_iterator label_it = leaf_labels.begin ();
       int lower_bound, upper_bound;
       while (label_it != leaf_labels.end ())
@@ -809,37 +815,41 @@ class HoleIntersector
         lower_bound = static_cast<int> (*label_it) - opening_angle_;
         upper_bound = static_cast<int> (*label_it) + opening_angle_;
         // add one interval (negative lower bound or upper bound larger than angle_resolution_ are allowed)
-        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+        acc_vp_intervals.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
             (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
         label_it++;
       }
 
       // check if intervals in set need to be normalized
-      if (accumulated_viewpoints.begin ()->lower () < 0)
+      if (acc_vp_intervals.begin ()->lower () < 0)
       {
-        lower_bound = accumulated_viewpoints.begin ()->lower ();
-        upper_bound = accumulated_viewpoints.begin ()->upper ();
-        accumulated_viewpoints.erase (accumulated_viewpoints.begin ());
-        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+        lower_bound = acc_vp_intervals.begin ()->lower ();
+        upper_bound = acc_vp_intervals.begin ()->upper ();
+        acc_vp_intervals.erase (acc_vp_intervals.begin ());
+        acc_vp_intervals.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
             (0, upper_bound, boost::icl::interval_bounds::closed ()));
-        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+        acc_vp_intervals.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
             (angle_resolution_ + lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
       }
-      boost::icl::interval_set<int>::iterator last_element = accumulated_viewpoints.end ();
+      boost::icl::interval_set<int>::iterator last_element = acc_vp_intervals.end ();
       last_element--;
       if (last_element->upper () >= angle_resolution_)
       {
         lower_bound = last_element->lower ();
         upper_bound = last_element->upper ();
-        accumulated_viewpoints.erase (last_element);
-        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+        acc_vp_intervals.erase (last_element);
+        acc_vp_intervals.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
             (0, upper_bound - angle_resolution_, boost::icl::interval_bounds::closed ()));
-        accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+        acc_vp_intervals.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
             (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
       }
 
+      // prepare output argument (present leaf labels)
+      std::vector<uint32_t> tmp_leaf_labels_vec (leaf_labels.begin (), leaf_labels.end ());
+      leaf_labels_vec.swap (tmp_leaf_labels_vec);
+
       // gather the number of marks in the viewpoint marker
-      if (accumulated_viewpoints.size () >= min_bin_marks_)
+      if (acc_vp_intervals.size () >= min_bin_marks_)
       {
         return true;
       }
