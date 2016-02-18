@@ -524,8 +524,7 @@ class HoleIntersector
         transparent_object_reconstruction::VoxelizedTransObjInfo trans_obj_info;
 
         // create temporary PCLPointCloud2 for conversion to ros::sensor_msgs::PointCloud2
-        pcl::PCLPointCloud2 tmp_PCLPC2;
-
+        pcl::PCLPointCloud2 pcl_pc2;
         if (map_frame_.compare (tabletop_frame_) != 0)
         {
           // transform and publish in map frame
@@ -537,26 +536,24 @@ class HoleIntersector
           // publish
           intersec_pub_.publish (tmp_cloud);
 
-          LabelCloudPtr tmp_voxel_centers (new LabelCloud);
-          // transform in map frame
-          pcl::transformPointCloud (*voxelized_intersec_cloud_, *tmp_voxel_centers, table_to_map_transform_);
+          // transform voxel centers in map frame
+          LabelCloudPtr voxel_centers_map_frame (new LabelCloud);
+          pcl::transformPointCloud (*voxelized_intersec_cloud_, *voxel_centers_map_frame, table_to_map_transform_);
           // convert transformed voxel centers to PCLPointCloud2
-          pcl::toPCLPointCloud2<LabelPoint> (*tmp_voxel_centers, tmp_PCLPC2);
+          pcl::toPCLPointCloud2<LabelPoint> (*voxel_centers_map_frame, pcl_pc2);
         }
         else
         {
-          ROS_INFO ("MUAHAHAHAA");
           // publish
           intersec_pub_.publish (intersec_cloud_);
-
-          // convert voxel centers to PCLPointCloud2
-          pcl::toPCLPointCloud2<LabelPoint> (*voxelized_intersec_cloud_, tmp_PCLPC2);
+          pcl::toPCLPointCloud2<LabelPoint> (*voxelized_intersec_cloud_, pcl_pc2);
         }
-        // convert to sensor_msgs::PointCloud2
-        pcl_conversions::moveFromPCL (tmp_PCLPC2, trans_obj_info.voxel_centers);
+        // convert voxel centers to sensor_msgs::PointCloud2
+        pcl_conversions::moveFromPCL (pcl_pc2, trans_obj_info.voxel_centers);
         // set header information
         trans_obj_info.voxel_centers.header = header;
 
+        // finish rest of VoxelizedTransObjInfo message
         // set labels for all voxels
         convertLabelVectorCollection2VoxelLabelCollection (voxel_labels_, trans_obj_info.voxel_labels);
 
