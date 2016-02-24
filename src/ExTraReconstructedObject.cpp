@@ -54,6 +54,7 @@ class ExTraReconstructedObject
       param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
       param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
       param_handle_.param<float> ("median_fraction", median_fraction_, MEDIAN_FRACTION);
+      param_handle_.param<bool> ("write_visualization", write_visualization_, false);
 
       voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/voxelized_intersection", 10, true);
 
@@ -88,9 +89,10 @@ class ExTraReconstructedObject
         param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
         param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
         param_handle_.param<float> ("median_fraction", median_fraction_, MEDIAN_FRACTION);
+        param_handle_.param<bool> ("write_visualization", write_visualization_, false);
       }
 
-      ROS_DEBUG ("ExTra-callback params: angle_resolution_ %i, opening_angle_ %i, median_fraction_ %f", angle_resolution_, opening_angle_, median_fraction_);
+      ROS_DEBUG ("ExTra-callback params: angle_resolution_ %i, opening_angle_ %i, median_fraction_ %f, write_visualization_ %s", angle_resolution_, opening_angle_, median_fraction_, write_visualization_ ? "true" : "false");
 
       // clear old marker
       pcl_conversions::fromPCL (cloud->header, clear_marker_array_.markers.front ().header);
@@ -211,10 +213,14 @@ class ExTraReconstructedObject
 
         // ===== bin visualization =====
         std::stringstream img_ss;
-        img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
-          <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
-        std::ofstream img (img_ss.str ().c_str ());
-        img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
+        std::ofstream img;
+        if (write_visualization_)
+        {
+          img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
+            <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
+          img.open (img_ss.str ().c_str ());
+          img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
+        }
         Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
         // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
         // number of bin entries
@@ -250,30 +256,33 @@ class ExTraReconstructedObject
               }
 
               // ===== bin visualization =====
-              std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
-              LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
-              while (marker_it != leaf_cloud->points.end ())
+              if (write_visualization_)
               {
-                for (int k = -opening_angle_; k <= opening_angle_; ++k)
+                std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
+                LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
+                while (marker_it != leaf_cloud->points.end ())
                 {
-                  view_bin_marker[(marker_it->label + k + angle_resolution_) % angle_resolution_] = 1;
+                  for (int k = -opening_angle_; k <= opening_angle_; ++k)
+                  {
+                    view_bin_marker[(marker_it->label + k + angle_resolution_) % angle_resolution_] = 1;
+                  }
+                  marker_it++;
                 }
-                marker_it++;
-              }
-              std::stringstream img_line_ss;
-              size_t img_map_counter = 0;
-              for (size_t k = 0; k < view_bin_marker.size (); ++k)
-              {
-                img_line_ss << static_cast<int> (view_bin_marker[k]) << " ";
-                img_map_counter += view_bin_marker[k];
-              }
-              img_line_ss << std::endl;
-              img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
-                    std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
+                std::stringstream img_line_ss;
+                size_t img_map_counter = 0;
+                for (size_t k = 0; k < view_bin_marker.size (); ++k)
+                {
+                  img_line_ss << static_cast<int> (view_bin_marker[k]) << " ";
+                  img_map_counter += view_bin_marker[k];
+                }
+                img_line_ss << std::endl;
+                img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
+                      std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
 
-              approx_cluster_center[0] += leaf_center_it->x;
-              approx_cluster_center[1] += leaf_center_it->y;
-              approx_cluster_center[2] += leaf_center_it->z;
+                approx_cluster_center[0] += leaf_center_it->x;
+                approx_cluster_center[1] += leaf_center_it->y;
+                approx_cluster_center[2] += leaf_center_it->z;
+              }
               // ===== bin visualization =====
 
               // store points of current leaf
@@ -299,26 +308,30 @@ class ExTraReconstructedObject
         }
 
         // ===== bin visualization =====
-        approx_cluster_center /= static_cast<double> (output[i]->points.size ());
-        img << "# cluster contained labels at the following positions: ";
-        std::set<uint32_t>::const_iterator label_it = all_labels_in_cluster.begin ();
-        while (label_it != all_labels_in_cluster.end ())
+        std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it;
+        if (write_visualization_)
         {
-          img << *label_it++ << " ";
-        }
-        img << std::endl;
-        img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
-          << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
-        img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
+          approx_cluster_center /= static_cast<double> (output[i]->points.size ());
+          img << "# cluster contained labels at the following positions: ";
+          std::set<uint32_t>::const_iterator label_it = all_labels_in_cluster.begin ();
+          while (label_it != all_labels_in_cluster.end ())
+          {
+            img << *label_it++ << " ";
+          }
+          img << std::endl;
+          img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
+            << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
+          img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
 
-        std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it = img_map.begin ();
-        while (map_it != img_map.end ())
-        {
-          img << map_it->second.second;
-          map_it++;
+          map_it = img_map.begin ();
+          while (map_it != img_map.end ())
+          {
+            img << map_it->second.second;
+            map_it++;
+          }
+          img.flush ();
+          img.close ();
         }
-        img.flush ();
-        img.close ();
         // ===== bin visualization =====
 
         // get the number of bin-entries of the median
@@ -459,6 +472,7 @@ class ExTraReconstructedObject
     int angle_resolution_;
     int opening_angle_;
     float median_fraction_;
+    bool write_visualization_;
 
     void setUpVisMarker (void)
     {
