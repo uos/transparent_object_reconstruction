@@ -188,7 +188,7 @@ class ExTraReconstructedObject
         total_points += output[i]->points.size ();
 
         // ====== refinement filter of the extracted clusters =====
-
+        ROS_INFO ("started working on a cluster with %lu points", output[i]->points.size ());
         // collect all labels in the current cluster
         std::set<uint32_t> all_labels_in_cluster;
 
@@ -336,7 +336,7 @@ class ExTraReconstructedObject
           map_it++;
         }
         // store all other leaves as intersection cloud and refined voxel centers
-        while (map_it != img_map. end ())
+        while (map_it != img_map.end ())
         {
           refined_voxel_centers->points.push_back (output[i]->points[map_it->second.first]);
           refined_intersection->points.insert (refined_intersection->points.end (),
@@ -344,6 +344,9 @@ class ExTraReconstructedObject
               leaf_clouds[map_it->second.first].points.end ());
           map_it++;
         }
+        ROS_INFO ("determined that %lu of %lu initial points belong to transparent object",
+            refined_voxel_centers->points.size (), output[i]->points.size ());
+
         // TODO: try mean based post-filtering instead of median
 
         // set header and adapt the dimensions of the refined clouds
