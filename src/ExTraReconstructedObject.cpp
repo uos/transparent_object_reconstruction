@@ -299,6 +299,7 @@ class ExTraReconstructedObject
         }
 
         // ===== bin visualization =====
+        approx_cluster_center /= static_cast<double> (output[i]->points.size ());
         img << "# cluster contained labels at the following positions: ";
         std::set<uint32_t>::const_iterator label_it = all_labels_in_cluster.begin ();
         while (label_it != all_labels_in_cluster.end ())
