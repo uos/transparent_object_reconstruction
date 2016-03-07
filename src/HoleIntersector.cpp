@@ -304,8 +304,7 @@ class HoleIntersector
 
         // ----- create frustum -----
         LabelCloudPtr frustum (new LabelCloud);
-        createSampleRays (hole_sample_cloud, frustum, leaf_size[0]); //TODO: sampling with hole_sample_cloud, not with xy_hole_sample_cloud!
-
+        createSampleRays (hole_sample_cloud, frustum, leaf_size[0]);
         ROS_DEBUG ("created frustum, size: %lu", frustum->points.size ());
         frustum->header = hole_sample_cloud->header;
 
@@ -317,11 +316,20 @@ class HoleIntersector
           LabelCloudPtr transformed_frustum (new LabelCloud);
           pcl::transformPointCloud (*frustum, *transformed_frustum, hole_to_tabletop);
 
+          // create a downsampled version of the transformed frustum -- so that the overall
+          // point cloud is less dense and checks of individual leafs become much faster
+          // pcl::VoxelGrid unfortunately produces some strange gaps - therefore octree is used for voxelization
+          LabelCloudPtr v_trans_frustum (new LabelCloud);
+          LabelOctree::Ptr voxelize_tree (new LabelOctree (octree_resolution_));
+          voxelize_tree->setInputCloud (transformed_frustum);
+          voxelize_tree->addPointsFromInputCloud ();
+          voxelize_tree->getOccupiedVoxelCenters (v_trans_frustum->points);
+
           // add frustum to collection of all frusta
           all_frusta_->points.reserve (all_frusta_->points.size () +
               transformed_frustum->points.size ());
           all_frusta_->points.insert (all_frusta_->points.end (),
-              transformed_frustum->points.begin (), transformed_frustum->points.end ());
+              v_trans_frustum->points.begin (), v_trans_frustum->points.end ());
           // adapt dimensions of point cloud
           all_frusta_->width = all_frusta_->points.size ();
           all_frusta_->height = 1;
