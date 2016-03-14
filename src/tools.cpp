@@ -29,6 +29,24 @@ convert<Eigen::Vector4f, LabelPoint> (const LabelPoint &p)
 }
 
 template <>
+Eigen::Vector3d
+convert<Eigen::Vector3d, LabelPoint> (const LabelPoint &p)
+{
+  return Eigen::Vector3d (p.x, p.y, p.z);
+}
+
+template <>
+LabelPoint
+convert<LabelPoint, Eigen::Vector3d> (const Eigen::Vector3d &v)
+{
+  LabelPoint p;
+  p.x = v[0];
+  p.y = v[1];
+  p.z = v[2];
+  return p;
+}
+
+template <>
 ColorPoint
 convert<ColorPoint, Eigen::Vector3f> (const Eigen::Vector3f &v)
 {
