@@ -74,6 +74,9 @@ class HoleIntersector
       all_frusta_ = boost::make_shared<LabelCloud> ();
       intersec_cloud_ = boost::make_shared<LabelCloud> ();
 
+      // indicate that reference bounding box for octree isn't set yet
+      reference_bb_set_ = false;
+
     };
 
     void add_holes_cb (const transparent_object_reconstruction::Holes::ConstPtr &holes)
@@ -316,11 +319,25 @@ class HoleIntersector
           LabelCloudPtr transformed_frustum (new LabelCloud);
           pcl::transformPointCloud (*frustum, *transformed_frustum, hole_to_tabletop);
 
+          // define reference bounding box from the first received frustum - this way
+          // all octrees should be properly aligned
+          if (!reference_bb_set_)
+          {
+            LabelPoint min_p, max_p;
+            pcl::getMinMax3D (*transformed_frustum, min_p, max_p);
+            min_ref_bb_ = Eigen::Vector3d (min_p.x, min_p.y, min_p.z);
+            max_ref_bb_ = Eigen::Vector3d (max_p.x, max_p.y, max_p.z);
+          }
+
           // create a downsampled version of the transformed frustum -- so that the overall
           // point cloud is less dense and checks of individual leafs become much faster
           // pcl::VoxelGrid unfortunately produces some strange gaps - therefore octree is used for voxelization
           LabelCloudPtr v_trans_frustum (new LabelCloud);
           LabelOctree::Ptr voxelize_tree (new LabelOctree (octree_resolution_));
+          // set reference bounding box
+          voxelize_tree->defineBoundingBox (min_ref_bb_[0], min_ref_bb_[1], min_ref_bb_[2],
+          max_ref_bb_[0], max_ref_bb_[1], max_ref_bb_[2]);
+
           voxelize_tree->setInputCloud (transformed_frustum);
           voxelize_tree->addPointsFromInputCloud ();
           voxelize_tree->getOccupiedVoxelCenters (v_trans_frustum->points);
@@ -373,6 +390,8 @@ class HoleIntersector
       }
       // clear old content from octree and intersection cloud
       octree_->deleteTree ();
+      octree_->defineBoundingBox (min_ref_bb_[0], min_ref_bb_[1], min_ref_bb_[2],
+          max_ref_bb_[0], max_ref_bb_[1], max_ref_bb_[2]);
       octree_->setInputCloud (all_frusta_);
       octree_->addPointsFromInputCloud ();
 
@@ -586,6 +605,9 @@ class HoleIntersector
       vis_pub_.publish (clear_marker_array_);
       frusta_marker_.markers.clear ();
       frame_change_indices.clear ();
+      // reset reference bounding box
+      reference_bb_set_ = false;
+      min_ref_bb_ = max_ref_bb_ = Eigen::Vector3d::Zero ();
       // ...and exit
       ROS_INFO ("Reset HoleIntersector");
       return true;
@@ -602,6 +624,10 @@ class HoleIntersector
     int angle_resolution_;
     int opening_angle_;
     int min_bin_marks_;
+
+    bool reference_bb_set_;
+    Eigen::Vector3d min_ref_bb_;
+    Eigen::Vector3d max_ref_bb_;
 
     Eigen::Affine3d table_to_map_transform_;
     tf::StampedTransform table_to_map_;
