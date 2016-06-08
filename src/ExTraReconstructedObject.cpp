@@ -255,35 +255,32 @@ class ExTraReconstructedObject
                 leaf_point_it++;
               }
 
-              // ===== bin visualization =====
-              if (write_visualization_)
+              // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
+              std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
+              LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
+              while (marker_it != leaf_cloud->points.end ())
               {
-                std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
-                LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
-                while (marker_it != leaf_cloud->points.end ())
+                for (int k = -opening_angle_; k <= opening_angle_; ++k)
                 {
-                  for (int k = -opening_angle_; k <= opening_angle_; ++k)
-                  {
-                    view_bin_marker[(marker_it->label + k + angle_resolution_) % angle_resolution_] = 1;
-                  }
-                  marker_it++;
+                  view_bin_marker[(marker_it->label + k + angle_resolution_) % angle_resolution_] = 1;
                 }
-                std::stringstream img_line_ss;
-                size_t img_map_counter = 0;
-                for (size_t k = 0; k < view_bin_marker.size (); ++k)
-                {
-                  img_line_ss << static_cast<int> (view_bin_marker[k]) << " ";
-                  img_map_counter += view_bin_marker[k];
-                }
-                img_line_ss << std::endl;
-                img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
-                      std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
-
-                approx_cluster_center[0] += leaf_center_it->x;
-                approx_cluster_center[1] += leaf_center_it->y;
-                approx_cluster_center[2] += leaf_center_it->z;
+                marker_it++;
               }
-              // ===== bin visualization =====
+              std::stringstream img_line_ss;
+              size_t img_map_counter = 0;
+              for (size_t k = 0; k < view_bin_marker.size (); ++k)
+              {
+                img_line_ss << static_cast<int> (view_bin_marker[k]) << " ";
+                img_map_counter += view_bin_marker[k];
+              }
+              img_line_ss << std::endl;
+              img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
+                    std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
+
+              approx_cluster_center[0] += leaf_center_it->x;
+              approx_cluster_center[1] += leaf_center_it->y;
+              approx_cluster_center[2] += leaf_center_it->z;
+              // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
 
               // store points of current leaf
               leaf_clouds.push_back (*leaf_cloud);

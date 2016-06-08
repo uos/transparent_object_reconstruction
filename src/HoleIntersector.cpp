@@ -325,6 +325,14 @@ class HoleIntersector
           voxelize_tree->addPointsFromInputCloud ();
           voxelize_tree->getOccupiedVoxelCenters (v_trans_frustum->points);
 
+          // add the current label to the points representing leaf center points
+          LabelCloud::VectorType::iterator v_trans_frustum_it = v_trans_frustum->points.begin ();
+          while (v_trans_frustum_it != v_trans_frustum->points.end ())
+          {
+            v_trans_frustum_it->label = current_label;
+            v_trans_frustum_it++;
+          }
+
           // add frustum to collection of all frusta
           all_frusta_->points.reserve (all_frusta_->points.size () +
               transformed_frustum->points.size ());
@@ -406,7 +414,7 @@ class HoleIntersector
         container.getPointIndices (leaf_point_indices->indices);
 
         // check if enough points in leaf
-        if (leaf_point_indices->indices.size () > min_leaf_points_)
+        if (leaf_point_indices->indices.size () >= min_leaf_points_)
         {
           filled_leaves++;
           extract.setIndices (leaf_point_indices);
@@ -617,7 +625,7 @@ class HoleIntersector
       intersec_marker_.scale.x = octree_resolution_;
       intersec_marker_.scale.y = octree_resolution_;
       intersec_marker_.scale.z = octree_resolution_;
-      intersec_marker_.color.a = 0.75;
+      intersec_marker_.color.a = 1.0;
       intersec_marker_.color.r = 0.0;
       intersec_marker_.color.g = 1.0;
       intersec_marker_.color.b = 0.0;
