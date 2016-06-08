@@ -1012,19 +1012,22 @@ struct HoleDetector
         double dist_sum = .0f;
         auto border_it = border_cloud->points.begin ();
 
-        // check if hole border aligns with tabletop (or hole was caused by noise of tabletop obj)
-        while (border_it != border_cloud->points.end ())
-        {
-          dist_sum += ::pcl::pointToPlaneDistance (*border_it++, plane_coefficients);
-        }
-
-        double avg_dist = dist_sum / static_cast<double> (border_cloud->points.size ());
-        if (avg_dist > *plane_dist_threshold_)
-        {
-          // skip hole! should something more be done?
-          // TODO: remove measurement points inside hole anyway?
-          continue;
-        }
+        // TODO: only compute the average distance from border points to idealized table plane
+        // for those points that belong to the outside border and not to potentially spurious
+        // measurement points that are enclosed by the convex hull; implement fix for this!
+//        // check if hole border aligns with tabletop (or hole was caused by noise of tabletop obj)
+//        while (border_it != border_cloud->points.end ())
+//        {
+//          dist_sum += ::pcl::pointToPlaneDistance (*border_it++, plane_coefficients);
+//        }
+//
+//        double avg_dist = dist_sum / static_cast<double> (border_cloud->points.size ());
+//        if (avg_dist > *plane_dist_threshold_)
+//        {
+//          // skip hole! should something more be done?
+//          // TODO: remove measurement points inside hole anyway?
+//          continue;
+//        }
 
         // project border into plane and retrieve convex hull
         auto conv_border_cloud = boost::make_shared<::pcl::PointCloud<PointT> > ();
