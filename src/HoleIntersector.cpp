@@ -327,6 +327,7 @@ class HoleIntersector
             pcl::getMinMax3D (*transformed_frustum, min_p, max_p);
             min_ref_bb_ = Eigen::Vector3d (min_p.x, min_p.y, min_p.z);
             max_ref_bb_ = Eigen::Vector3d (max_p.x, max_p.y, max_p.z);
+            reference_bb_set_ = true;
           }
 
           // create a downsampled version of the transformed frustum -- so that the overall
