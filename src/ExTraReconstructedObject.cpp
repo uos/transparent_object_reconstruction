@@ -24,6 +24,10 @@
 #include <pcl/search/kdtree.h>
 #include <pcl/octree/octree.h>
 
+// boost interval stuff for alternative implementation of viewpoint overlap based reconstruction...
+#include <boost/icl/interval_set.hpp>
+#include <boost/icl/discrete_interval.hpp>
+
 #include <object_recognition_msgs/RecognizedObject.h>
 #include <object_recognition_msgs/RecognizedObjectArray.h>
 
@@ -214,18 +218,30 @@ class ExTraReconstructedObject
         // ===== bin visualization =====
         std::stringstream img_ss;
         std::ofstream img;
+        std::ofstream alt_img;
+        std::stringstream alt_img_ss;
         if (write_visualization_)
         {
-          img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
+          img_ss << "old_bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
             <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
           img.open (img_ss.str ().c_str ());
           img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
+          alt_img_ss << "new_bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
+            <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
+          alt_img.open (alt_img_ss.str ().c_str ());
+          alt_img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
         }
         Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
         // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
         // number of bin entries
         std::multimap<size_t, std::pair<size_t, std::string> > img_map;
         // ===== bin visualization =====
+
+        // ===== alternative interval representation =====
+        // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
+        // number of bin entries
+        std::multimap<size_t, std::pair<size_t, std::string> > interval_map;
+        // ===== alternative interval representation =====
 
         size_t center_index = 0;
         while (leaf_center_it != output[i]->points.end ())
@@ -282,6 +298,57 @@ class ExTraReconstructedObject
               approx_cluster_center[2] += leaf_center_it->z;
               // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
 
+              // ===== alternative interval representation =====
+              boost::icl::interval_set<int> accumulated_viewpoints;
+              std::stringstream alt_img_line_ss;
+              marker_it = leaf_cloud->points.begin ();
+              while (marker_it != leaf_cloud->points.end ())
+              {
+                // compute interval limits
+                int lower_bound, upper_bound;
+                lower_bound = marker_it->label - opening_angle_;
+                upper_bound = marker_it->label + opening_angle_;
+                if (0 <= lower_bound && upper_bound < angle_resolution_)
+                {
+                  accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> > (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
+                }
+                else if (lower_bound < 0)
+                {
+                  accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+                      (0, upper_bound, boost::icl::interval_bounds::closed ()));
+                  accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+                      (angle_resolution_ + lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
+                }
+                else    // upper bound > angle_resolution_
+                {
+                  accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+                      (0, upper_bound - angle_resolution_, boost::icl::interval_bounds::closed ()));
+                  accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
+                      (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
+                }
+                marker_it++;
+              }
+
+              std::vector<int> zero_line (angle_resolution_, 0);
+              boost::icl::interval_set<int>::const_iterator i_set_iterator = accumulated_viewpoints.begin ();
+              while (i_set_iterator != accumulated_viewpoints.end ())
+              {
+                for (int k = i_set_iterator->lower (); k <= i_set_iterator->upper (); ++k)
+                {
+                  zero_line[k] = 1;
+                }
+                i_set_iterator++;
+              }
+              for (size_t k = 0; k < zero_line.size (); ++k)
+              {
+                alt_img_line_ss << zero_line[k] << " ";
+              }
+              alt_img_line_ss << std::endl;
+
+              interval_map.insert (std::pair<size_t, std::pair<size_t, std::string> >
+                  (accumulated_viewpoints.size (), std::pair<size_t, std::string> (center_index, alt_img_line_ss.str ())));
+              // ===== alternative interval representation =====
+
               // store points of current leaf
               leaf_clouds.push_back (*leaf_cloud);
               // store nr of labels of current leaf
@@ -320,14 +387,35 @@ class ExTraReconstructedObject
             << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
           img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
 
+          alt_img << "# cluster contained labels at the following positions: ";
+          label_it = all_labels_in_cluster.begin ();
+          while (label_it != all_labels_in_cluster.end ())
+          {
+            alt_img << *label_it++ << " ";
+          }
+          alt_img << std::endl;
+          alt_img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
+            << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
+          alt_img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
           map_it = img_map.begin ();
           while (map_it != img_map.end ())
           {
             img << map_it->second.second;
             map_it++;
           }
+          std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it_ = interval_map.begin ();
+          while (map_it_ != interval_map.end ())
+          {
+            alt_img << map_it_->second.second;
+            map_it_++;
+          }
+
           img.flush ();
           img.close ();
+          std::cout << "closed file '" << img_ss.str () << "'." << std::endl;
+          alt_img.flush ();
+          alt_img.close ();
+          std::cout << "closed file '" << alt_img_ss.str () << "'." << std::endl;
         }
         // ===== bin visualization =====
 
