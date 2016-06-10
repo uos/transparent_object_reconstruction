@@ -218,23 +218,14 @@ class ExTraReconstructedObject
         // ===== bin visualization =====
         std::stringstream img_ss;
         std::ofstream img;
-        std::ofstream alt_img;
-        std::stringstream alt_img_ss;
         if (write_visualization_)
         {
-          img_ss << "old_bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
+          img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
             <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
           img.open (img_ss.str ().c_str ());
           img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
-          alt_img_ss << "new_bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
-            <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
-          alt_img.open (alt_img_ss.str ().c_str ());
-          alt_img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
         }
         Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
-        // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
-        // number of bin entries
-        std::multimap<size_t, std::pair<size_t, std::string> > img_map;
         // ===== bin visualization =====
 
         // ===== alternative interval representation =====
@@ -263,6 +254,8 @@ class ExTraReconstructedObject
               extract.setIndices (leaf_point_indices);
               extract.filter (*leaf_cloud);
 
+              // create a set of all available label
+              // in theory each present point should already have a different label...
               std::set<uint32_t> leaf_labels;
               LabelCloud::VectorType::const_iterator leaf_point_it = leaf_cloud->points.begin ();
               while (leaf_point_it != leaf_cloud->points.end ())
@@ -274,25 +267,8 @@ class ExTraReconstructedObject
               // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
               std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
               LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
-              while (marker_it != leaf_cloud->points.end ())
-              {
-                for (int k = -opening_angle_; k <= opening_angle_; ++k)
-                {
-                  view_bin_marker[(marker_it->label + k + angle_resolution_) % angle_resolution_] = 1;
-                }
-                marker_it++;
-              }
               std::stringstream img_line_ss;
-              size_t img_map_counter = 0;
-              for (size_t k = 0; k < view_bin_marker.size (); ++k)
-              {
-                img_line_ss << static_cast<int> (view_bin_marker[k]) << " ";
-                img_map_counter += view_bin_marker[k];
-              }
-              img_line_ss << std::endl;
-              img_map.insert (std::pair<size_t, std::pair<size_t, std::string> > (img_map_counter,
-                    std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
-
+              // compute approximate cluster as additional information included in image file
               approx_cluster_center[0] += leaf_center_it->x;
               approx_cluster_center[1] += leaf_center_it->y;
               approx_cluster_center[2] += leaf_center_it->z;
@@ -300,8 +276,7 @@ class ExTraReconstructedObject
 
               // ===== alternative interval representation =====
               boost::icl::interval_set<int> accumulated_viewpoints;
-              std::stringstream alt_img_line_ss;
-              marker_it = leaf_cloud->points.begin ();
+              // TODO: if we've already put all labels into a set, then let's just iterate over this set
               while (marker_it != leaf_cloud->points.end ())
               {
                 // compute interval limits
@@ -341,12 +316,12 @@ class ExTraReconstructedObject
               }
               for (size_t k = 0; k < zero_line.size (); ++k)
               {
-                alt_img_line_ss << zero_line[k] << " ";
+                img_line_ss << zero_line[k] << " ";
               }
-              alt_img_line_ss << std::endl;
+              img_line_ss << std::endl;
 
               interval_map.insert (std::pair<size_t, std::pair<size_t, std::string> >
-                  (accumulated_viewpoints.size (), std::pair<size_t, std::string> (center_index, alt_img_line_ss.str ())));
+                  (accumulated_viewpoints.size (), std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
               // ===== alternative interval representation =====
 
               // store points of current leaf
@@ -372,7 +347,7 @@ class ExTraReconstructedObject
         }
 
         // ===== bin visualization =====
-        std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it;
+        std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it = interval_map.begin ();
         if (write_visualization_)
         {
           approx_cluster_center /= static_cast<double> (output[i]->points.size ());
@@ -387,54 +362,34 @@ class ExTraReconstructedObject
             << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
           img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
 
-          alt_img << "# cluster contained labels at the following positions: ";
-          label_it = all_labels_in_cluster.begin ();
-          while (label_it != all_labels_in_cluster.end ())
-          {
-            alt_img << *label_it++ << " ";
-          }
-          alt_img << std::endl;
-          alt_img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
-            << approx_cluster_center[1] << ", " << approx_cluster_center[2] << std::endl;
-          alt_img << angle_resolution_ << " " << output[i]->points.size () << std::endl;
-          map_it = img_map.begin ();
-          while (map_it != img_map.end ())
+          while (map_it != interval_map.end ())
           {
             img << map_it->second.second;
             map_it++;
-          }
-          std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it_ = interval_map.begin ();
-          while (map_it_ != interval_map.end ())
-          {
-            alt_img << map_it_->second.second;
-            map_it_++;
           }
 
           img.flush ();
           img.close ();
           std::cout << "closed file '" << img_ss.str () << "'." << std::endl;
-          alt_img.flush ();
-          alt_img.close ();
-          std::cout << "closed file '" << alt_img_ss.str () << "'." << std::endl;
         }
         // ===== bin visualization =====
 
         // get the number of bin-entries of the median
-        map_it = img_map.begin ();
-        for (size_t j = 0; j < img_map.size () / 2; ++j)
+        map_it = interval_map.begin ();
+        for (size_t j = 0; j < interval_map.size () / 2; ++j)
         {
           map_it++;
         }
         size_t median = map_it->first;
         size_t median_bin_threshold = static_cast<size_t> (median_fraction_ * median);
         // iterate over all leaves that are to be ignored
-        map_it = img_map.begin ();
         while (map_it->first < median_bin_threshold)
+        map_it = interval_map.begin ();
         {
           map_it++;
         }
         // store all other leaves as intersection cloud and refined voxel centers
-        while (map_it != img_map.end ())
+        while (map_it != interval_map.end ())
         {
           refined_voxel_centers->points.push_back (output[i]->points[map_it->second.first]);
           refined_intersection->points.insert (refined_intersection->points.end (),
