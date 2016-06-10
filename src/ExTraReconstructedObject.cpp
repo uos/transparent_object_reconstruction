@@ -235,6 +235,7 @@ class ExTraReconstructedObject
         // ===== alternative interval representation =====
 
         size_t center_index = 0;
+        std::set<uint32_t>::const_iterator label_it;
         while (leaf_center_it != output[i]->points.end ())
         {
           // retrieve the octree indices of the current center
@@ -266,7 +267,6 @@ class ExTraReconstructedObject
 
               // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
               std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
-              LabelCloud::VectorType::const_iterator marker_it = leaf_cloud->points.begin ();
               std::stringstream img_line_ss;
               // compute approximate cluster as additional information included in image file
               approx_cluster_center[0] += leaf_center_it->x;
@@ -276,13 +276,14 @@ class ExTraReconstructedObject
 
               // ===== alternative interval representation =====
               boost::icl::interval_set<int> accumulated_viewpoints;
-              // TODO: if we've already put all labels into a set, then let's just iterate over this set
-              while (marker_it != leaf_cloud->points.end ())
+              // add all available labels to viewpoint interval
+              label_it = leaf_labels.begin ();
+              while (label_it != leaf_labels.end ())
               {
                 // compute interval limits
                 int lower_bound, upper_bound;
-                lower_bound = marker_it->label - opening_angle_;
-                upper_bound = marker_it->label + opening_angle_;
+                lower_bound = static_cast<int> (*label_it) - opening_angle_;
+                upper_bound = static_cast<int> (*label_it) + opening_angle_;
                 if (0 <= lower_bound && upper_bound < angle_resolution_)
                 {
                   accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> > (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
@@ -301,7 +302,7 @@ class ExTraReconstructedObject
                   accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
                       (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
                 }
-                marker_it++;
+                label_it++;
               }
 
               std::vector<int> zero_line (angle_resolution_, 0);
@@ -352,7 +353,8 @@ class ExTraReconstructedObject
         {
           approx_cluster_center /= static_cast<double> (output[i]->points.size ());
           img << "# cluster contained labels at the following positions: ";
-          std::set<uint32_t>::const_iterator label_it = all_labels_in_cluster.begin ();
+          // add information about available labels to image file
+          label_it = all_labels_in_cluster.begin ();
           while (label_it != all_labels_in_cluster.end ())
           {
             img << *label_it++ << " ";
