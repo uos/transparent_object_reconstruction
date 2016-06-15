@@ -34,6 +34,8 @@
 #include <transparent_object_reconstruction/common_typedefs.h>
 #include <transparent_object_reconstruction/tools.h>
 
+#include <transparent_object_reconstruction/VoxelizedTransObjInfo.h>
+
 #include <bag_loop_check/bag_loop_check.hpp>
 
 #include <map>
@@ -58,20 +60,15 @@ class ExTraReconstructedObject
       param_handle_.param<int> ("angle_resolution", angle_resolution_, ANGLE_RESOLUTION);
       param_handle_.param<int> ("opening_angle", opening_angle_, OPENING_ANGLE);
       param_handle_.param<float> ("median_fraction", median_fraction_, MEDIAN_FRACTION);
-      param_handle_.param<bool> ("write_visualization", write_visualization_, false);
 
-      voxel_cloud_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/voxelized_intersection", 10, true);
-
-      refined_voxel_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/refined_voxel", 10, true);
+      // define all publishers
       refined_intersec_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/refined_intersec", 10, true);
-
       cluster_pub_ = nhandle_.advertise<LabelCloud> ("transObjRec/intersec_clusters", 10, true);
-
       all_hulls_vis_pub_ = nhandle_.advertise<visualization_msgs::MarkerArray> ("transObjRec/intersec_cluster_hulls", 10, true);
-
       result_pub_ = nhandle_.advertise<object_recognition_msgs::RecognizedObjectArray> ("transObjRec/trans_recon_results", 10, false);
 
-      intersec_sub_ = nhandle_.subscribe ("transObjRec/intersection", 5, &ExTraReconstructedObject::intersec_cb, this);
+      // subscribe to voxelized transparent object information
+      voxelized_info_sub_ = nhandle_.subscribe ("transObjRec/voxelized_info", 5, &ExTraReconstructedObject::cluster_refine_cb, this);
 
       ROS_INFO ("created ExTraReconstructedObject and subscribed to topic");
 
@@ -80,9 +77,21 @@ class ExTraReconstructedObject
       db_type = "{\"type\":\"empty\"}";
     };
 
-    void intersec_cb (const LabelCloud::ConstPtr &cloud)
+    void cluster_refine_cb (const transparent_object_reconstruction::VoxelizedTransObjInfo &trans_obj_info)
     {
-      ROS_INFO ("received intersection cloud with %lu points", cloud->points.size ());
+      // convert from sensor_msgs::PointCloud2 to templated pcl pointcloud
+      LabelCloudPtr voxelized_intersec (new LabelCloud);
+      pcl::PCLPointCloud2 pcl_pc2;
+      pcl_conversions::toPCL (trans_obj_info.voxel_centers, pcl_pc2);
+      pcl::console::setVerbosityLevel (pcl::console::L_ALWAYS);
+      pcl::fromPCLPointCloud2 (pcl_pc2, *voxelized_intersec);
+      pcl::console::setVerbosityLevel (pcl::console::L_INFO);
+      std_msgs::Header header;
+      header = trans_obj_info.voxel_centers.header;
+      pcl_conversions::toPCL (header, voxelized_intersec->header);
+
+      ROS_INFO ("received VoxelizedTransObjInfo, containing cloud with %lu points",
+          voxelized_intersec->points.size ());
 
       static int call_counter = 0;
 
@@ -99,32 +108,12 @@ class ExTraReconstructedObject
       ROS_DEBUG ("ExTra-callback params: angle_resolution_ %i, opening_angle_ %i, median_fraction_ %f, write_visualization_ %s", angle_resolution_, opening_angle_, median_fraction_, write_visualization_ ? "true" : "false");
 
       // clear old marker
-      pcl_conversions::fromPCL (cloud->header, clear_marker_array_.markers.front ().header);
+      clear_marker_array_.markers.front ().header = trans_obj_info.voxel_centers.header;
       all_hulls_vis_pub_.publish (clear_marker_array_);
 
-      // reduce number of points that need to be clustered via voxel grid
-      LabelCloudPtr leaf_center_cloud (new LabelCloud);
-      float octree_resolution = 0.01f;  // TODO: make accessible parameter
-      LabelOctree::Ptr octree (new LabelOctree (octree_resolution));
-      octree->setInputCloud (cloud);
-      octree->addPointsFromInputCloud ();
-      // get dimensions of octree
-      Eigen::Vector3d min_bbox, max_bbox;
-      octree->getBoundingBox (min_bbox[0], min_bbox[1], min_bbox[2], max_bbox[0], max_bbox[1], max_bbox[2]);
-      // use the occupied leaf centers for voxelization of the point cloud
-      octree->getOccupiedVoxelCenters (leaf_center_cloud->points);
-      // adapt dimensions of point cloud
-      leaf_center_cloud->width = leaf_center_cloud->points.size ();
-      leaf_center_cloud->height = 1;
-
-      ROS_INFO ("created grid cloud with %lu total points", leaf_center_cloud->points.size ());
-      leaf_center_cloud->header = cloud->header; // explicitly copy header information from incoming point cloud
-      voxel_cloud_pub_.publish (*leaf_center_cloud);
-      
-      // TODO: in theory a 3D region growing could also be done here and proof quicker (iff cloud was voxelized)
-      // do Euclidean clustering on the voxelized cloud
+      // perform clustering on the voxelized transparent object information
       pcl::search::KdTree<LabelPoint>::Ptr tree (new pcl::search::KdTree<LabelPoint>);
-      tree->setInputCloud (leaf_center_cloud);
+      tree->setInputCloud (voxelized_intersec);
 
       std::vector<pcl::PointIndices> cluster_indices;
       pcl::EuclideanClusterExtraction<LabelPoint> ec;
@@ -132,9 +121,10 @@ class ExTraReconstructedObject
       ec.setMinClusterSize (min_cluster_size_);
       ec.setMaxClusterSize (max_cluster_size_);
       ec.setSearchMethod (tree);
-      ec.setInputCloud (leaf_center_cloud);
+      ec.setInputCloud (voxelized_intersec);
       ec.extract (cluster_indices);
 
+      size_t total_cluster_points = 0;
       // retrieve the actual clusters from the indices
       std::vector<LabelCloudPtr> output;
       // clear the output vector
@@ -147,13 +137,17 @@ class ExTraReconstructedObject
           it != cluster_indices.end (); ++it)
       {
         pcl::ExtractIndices<LabelPoint> extract_object_indices;
-        extract_object_indices.setInputCloud (leaf_center_cloud);
+        extract_object_indices.setInputCloud (voxelized_intersec);
         extract_object_indices.setIndices (pcl::PointIndices::Ptr (new pcl::PointIndices(*it)));
         LabelCloudPtr tmp (new LabelCloud);
         extract_object_indices.filter (*tmp);
         output.push_back (tmp);
+        total_cluster_points += tmp->points.size ();
       }
   
+      LabelCloudPtr all_refined_clusters (new LabelCloud);
+      all_refined_clusters->points.reserve (total_cluster_points);
+
       // assign distinct colors and label to each cluster
       float h, r, g, b, color_increment;
       uint8_t red, green, blue;
@@ -168,7 +162,7 @@ class ExTraReconstructedObject
       // prepare recognized object array
       object_recognition_msgs::RecognizedObjectArray::Ptr transparent_recon_objs = boost::make_shared<object_recognition_msgs::RecognizedObjectArray> ();
       // set header - should correspond with the header from the cloud
-      pcl_conversions::fromPCL (cloud->header, transparent_recon_objs->header);
+      transparent_recon_objs->header = trans_obj_info.voxel_centers.header;
       transparent_recon_objs->objects.reserve (output.size ());
 
       int id_x, id_y, id_z;
@@ -188,32 +182,13 @@ class ExTraReconstructedObject
           p_it->label = i;
           p_it++;
         }
-        output[i]->header = cloud->header; // explicitly copy header information
-        cluster_pub_.publish (*output[i]);
+        output[i]->header = voxelized_intersec->header; // explicitly copy header information
         h += color_increment;
         total_points += output[i]->points.size ();
 
         // ====== refinement filter of the extracted clusters =====
         ROS_INFO ("started working on a cluster with %lu points", output[i]->points.size ());
-        // collect all labels in the current cluster
-        std::set<uint32_t> all_labels_in_cluster;
 
-        // let's just try the complete intersection with all available cluster labels here...
-        LabelCloudPtr refined_intersection (new LabelCloud);
-        LabelCloudPtr refined_voxel_centers (new LabelCloud);
-
-        // create extraction object
-        pcl::ExtractIndices<LabelPoint> extract;
-        extract.setInputCloud (cloud);
-        std::vector<LabelCloud> leaf_clouds;
-        leaf_clouds.reserve (output[i]->points.size ());
-        std::vector<size_t> leaf_label_numbers;
-        leaf_label_numbers.reserve (output[i]->points.size ());
-
-        pcl::PointIndices::Ptr leaf_point_indices (new pcl::PointIndices);
-        // iterate over all leaf centers in the current cluster
-        LabelCloud::VectorType::const_iterator leaf_center_it = output[i]->points.begin ();
-        size_t total_cluster_points = 0;
 
         // ===== bin visualization =====
         std::stringstream img_ss;
@@ -221,161 +196,56 @@ class ExTraReconstructedObject
         if (write_visualization_)
         {
           img_ss << "bit_arrays_frame" << std::setw (3) << std::setfill ('0') << call_counter
-            <<"_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
+            << "_cluster" << std::setw (3) << std::setfill ('0') << i << ".pbm";
           img.open (img_ss.str ().c_str ());
-          img << "P1" << "\n#Visualization of bit arrays in cluster " << i << "\n";
+          img << "P1" << "\n#Visualization of viewpoint intervals of cluster " << i << " in frame "
+          << call_counter << "\n";
         }
+        // ===== bin visualization =====
+
+        // collect all labels in the current cluster and the intervals for each voxel / leaf
+        // storage for the approximate cluster center
         Eigen::Vector3d approx_cluster_center = Eigen::Vector3d::Zero ();
-        // ===== bin visualization =====
-
-        // ===== alternative interval representation =====
-        // map to hold pairs of center point indices with their bin array (as a string), ordered according to the
-        // number of bin entries
-        std::multimap<size_t, std::pair<size_t, std::string> > interval_map;
-        // ===== alternative interval representation =====
-
-        size_t center_index = 0;
-        std::set<uint32_t>::const_iterator label_it;
-        while (leaf_center_it != output[i]->points.end ())
+        std::multimap<size_t, std::pair<size_t, boost::icl::interval_set<int> > > interval_map;
+        LabelCloudPtr refined_voxel_centers (new LabelCloud);
+        std::set<uint32_t> all_labels_in_cluster;
+        std::vector<int>::const_iterator cluster_index_it = cluster_indices[i].indices.begin ();
+        while (cluster_index_it != cluster_indices[i].indices.end ())
         {
-          // retrieve the octree indices of the current center
-          getOctreeIndices<LabelPoint> (min_bbox, *leaf_center_it, octree_resolution, id_x, id_y, id_z);
-          // retrieve the leaf container associated with the indices
-          if (octree->existLeaf (id_x, id_y, id_z))
+          // retrieve labels for the current voxel
+          std::vector<uint32_t>::const_iterator label_it = trans_obj_info.voxel_labels[*cluster_index_it].labels.begin ();
+          // add voxel labels to the set of cluster labels
+          while (label_it != trans_obj_info.voxel_labels[*cluster_index_it].labels.end ())
           {
-            LeafContainer* curr_container = octree->findLeaf (id_x, id_y, id_z);
-            if (curr_container != 0)
-            {
-              LabelCloudPtr leaf_cloud (new LabelCloud);
-              // remove old leaves
-              leaf_point_indices->indices.clear ();
-              // retrieve point indices of current leaf
-              curr_container->getPointIndices (leaf_point_indices->indices);
-              // retrieve the points from the container
-              extract.setIndices (leaf_point_indices);
-              extract.filter (*leaf_cloud);
-
-              // create a set of all available label
-              // in theory each present point should already have a different label...
-              std::set<uint32_t> leaf_labels;
-              LabelCloud::VectorType::const_iterator leaf_point_it = leaf_cloud->points.begin ();
-              while (leaf_point_it != leaf_cloud->points.end ())
-              {
-                leaf_labels.insert (leaf_point_it->label);
-                leaf_point_it++;
-              }
-
-              // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
-              std::vector<uint8_t> view_bin_marker (angle_resolution_, 0);
-              std::stringstream img_line_ss;
-              // compute approximate cluster as additional information included in image file
-              approx_cluster_center[0] += leaf_center_it->x;
-              approx_cluster_center[1] += leaf_center_it->y;
-              approx_cluster_center[2] += leaf_center_it->z;
-              // ===== bin visualization & computation of map to determine leafs belonging to clusters =====
-
-              // ===== alternative interval representation =====
-              boost::icl::interval_set<int> accumulated_viewpoints;
-              // add all available labels to viewpoint interval
-              label_it = leaf_labels.begin ();
-              int lower_bound, upper_bound;
-
-              while (label_it != leaf_labels.end ())
-              {
-                // compute interval limits
-                lower_bound = static_cast<int> (*label_it) - opening_angle_;
-                upper_bound = static_cast<int> (*label_it) + opening_angle_;
-
-                // add new interval to accumulated intervals
-                accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-                    (lower_bound, upper_bound, boost::icl::interval_bounds::closed ()));
-
-                label_it++;
-              }
-
-              // check if accumulated interval set needs some normalization
-              // check lower bound
-              if (accumulated_viewpoints.begin ()->lower () < 0)
-              {
-                lower_bound = accumulated_viewpoints.begin ()->lower ();
-                upper_bound = accumulated_viewpoints.begin ()->upper ();
-                // remove interval that is not normalized
-                accumulated_viewpoints.erase (accumulated_viewpoints.begin ());
-                // add two intervals in the normalized range instead
-                accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-                    (0, upper_bound, boost::icl::interval_bounds::closed ()));
-                accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-                    (angle_resolution_ + lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
-              }
-              //check upper bound
-              boost::icl::interval_set<int>::iterator last_element = accumulated_viewpoints.end ();
-              last_element--;
-              if (last_element->upper () >= angle_resolution_)
-              {
-                lower_bound = last_element-> lower ();
-                upper_bound = last_element-> upper ();
-                // remove interval that is not normalized
-                accumulated_viewpoints.erase  (last_element);
-                // add two intervals in the normalized range instead
-                accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-                    (0, upper_bound - angle_resolution_, boost::icl::interval_bounds::closed ()));
-                accumulated_viewpoints.insert (boost::icl::construct<boost::icl::discrete_interval<int> >
-                    (lower_bound, angle_resolution_ - 1, boost::icl::interval_bounds::closed ()));
-              }
-
-              std::vector<int> zero_line (angle_resolution_, 0);
-              boost::icl::interval_set<int>::const_iterator i_set_iterator = accumulated_viewpoints.begin ();
-              while (i_set_iterator != accumulated_viewpoints.end ())
-              {
-                for (int k = i_set_iterator->lower (); k <= i_set_iterator->upper (); ++k)
-                {
-                  zero_line[k] = 1;
-                }
-                i_set_iterator++;
-              }
-              for (size_t k = 0; k < zero_line.size (); ++k)
-              {
-                img_line_ss << zero_line[k] << " ";
-              }
-              img_line_ss << std::endl;
-
-              interval_map.insert (std::pair<size_t, std::pair<size_t, std::string> >
-                  (accumulated_viewpoints.size (), std::pair<size_t, std::string> (center_index, img_line_ss.str ())));
-              // ===== alternative interval representation =====
-
-              // store points of current leaf
-              leaf_clouds.push_back (*leaf_cloud);
-              // store nr of labels of current leaf
-              leaf_label_numbers.push_back (leaf_labels.size ());
-              // add leaf labels to collection of cluster labels
-              all_labels_in_cluster.insert (leaf_labels.begin (), leaf_labels.end ());
-              total_cluster_points += leaf_cloud->points.size ();
-            }
-            else
-            {
-              ROS_WARN ("ExTraReconstructedObject: leaf exists, but doesn't provide valid container");
-            }
+            all_labels_in_cluster.insert (*label_it++);
           }
-          else
-          {
-            ROS_WARN ("ExTraReconstructedObject: specified indices %i %i %i don't refer to an existing leaf.",
-                id_x, id_y, id_z);
-          }
-          leaf_center_it++;
-          center_index++;
+
+          // retrieve the viewpoint intervals for the current voxel
+          boost::icl::interval_set<int> voxel_vp_interval;
+          convertVoxelViewpointIntervals2ICLIntervalSet (trans_obj_info.voxel_intervals[*cluster_index_it],
+              voxel_vp_interval);
+          interval_map.insert (std::pair<size_t, std::pair<size_t, boost::icl::interval_set<int> > >
+              (voxel_vp_interval.size (), std::pair<size_t, boost::icl::interval_set<int> > (*cluster_index_it,voxel_vp_interval)));
+
+          // add voxel center to approximate cluster center
+          approx_cluster_center += convert<Eigen::Vector3d, LabelPoint> (voxelized_intersec->points[*cluster_index_it]);
+
+          cluster_index_it++;
         }
+        // compute the approximate cluster center
+        approx_cluster_center /= cluster_indices[i].indices.size ();
 
+        std::multimap<size_t, std::pair<size_t, boost::icl::interval_set<int> > >::const_iterator map_it
+          = interval_map.begin ();
         // ===== bin visualization =====
-        std::multimap<size_t, std::pair<size_t, std::string> >::const_iterator map_it = interval_map.begin ();
         if (write_visualization_)
         {
-          approx_cluster_center /= static_cast<double> (output[i]->points.size ());
-          img << "# cluster contained labels at the following positions: ";
+          img << "# cluster contained the following labels: ";
           // add information about available labels to image file
-          label_it = all_labels_in_cluster.begin ();
-          while (label_it != all_labels_in_cluster.end ())
+          std::set<uint32_t>::const_iterator cluster_label_it = all_labels_in_cluster.begin ();
+          while (cluster_label_it != all_labels_in_cluster.end ())
           {
-            img << *label_it++ << " ";
+            img << *cluster_label_it++ << " ";
           }
           img << std::endl;
           img << "# approximated cluster center: " << approx_cluster_center[0] << ", "
@@ -384,37 +254,52 @@ class ExTraReconstructedObject
 
           while (map_it != interval_map.end ())
           {
-            img << map_it->second.second;
+            // generate string from interval set
+            std::stringstream img_line_ss;
+            std::vector<int> zero_line (angle_resolution_, 0);
+            boost::icl::interval_set<int>::const_iterator i_set_iterator = map_it->second.second.begin ();
+            while (i_set_iterator != map_it->second.second.end ())
+            {
+              for (int k = i_set_iterator->lower (); k <= i_set_iterator->upper (); ++k)
+              {
+                zero_line[k] = 1;
+              }
+              i_set_iterator++;
+            }
+            for (size_t k = 0; k < zero_line.size (); ++k)
+            {
+              img_line_ss << zero_line[k] << " ";
+            }
+            img_line_ss << std::endl;
+            // add image line to image
+            img << img_line_ss.str ();
             map_it++;
           }
 
           img.flush ();
           img.close ();
-          std::cout << "closed file '" << img_ss.str () << "'." << std::endl;
+          ROS_INFO ("wrote visualization file '%s'.", img_ss.str ().c_str ());
+          map_it = interval_map.begin ();
         }
         // ===== bin visualization =====
 
-        // get the number of bin-entries of the median
-        map_it = interval_map.begin ();
+        // get median viewpoint coverage of the current cluster
         for (size_t j = 0; j < interval_map.size () / 2; ++j)
         {
           map_it++;
         }
         size_t median = map_it->first;
-        size_t median_bin_threshold = static_cast<size_t> (median_fraction_ * median);
-        // iterate over all leaves that are to be ignored
-        while (map_it->first < median_bin_threshold)
+        size_t median_vp_threshold = static_cast<size_t> (median_fraction_ * median);
+        // iterate over all leaves that are to be ignored (because they cover less than the desired threshold)
         map_it = interval_map.begin ();
+        while (map_it->first < median_vp_threshold)
         {
           map_it++;
         }
-        // store all other leaves as intersection cloud and refined voxel centers
+        // store all other voxel centers / leaves as refined voxel centers
         while (map_it != interval_map.end ())
         {
-          refined_voxel_centers->points.push_back (output[i]->points[map_it->second.first]);
-          refined_intersection->points.insert (refined_intersection->points.end (),
-              leaf_clouds[map_it->second.first].points.begin (),
-              leaf_clouds[map_it->second.first].points.end ());
+          refined_voxel_centers->points.push_back (voxelized_intersec->points[map_it->second.first]);
           map_it++;
         }
         ROS_INFO ("determined that %lu of %lu initial points belong to transparent object",
@@ -423,33 +308,38 @@ class ExTraReconstructedObject
         // TODO: try mean based post-filtering instead of median
 
         // set header and adapt the dimensions of the refined clouds
-        refined_intersection->header = output[i]->header;
-        refined_intersection->width = refined_intersection->points.size ();
-        refined_intersection->height = 1;
         refined_voxel_centers->header = output[i]->header;
         refined_voxel_centers->width = refined_voxel_centers->points.size ();
         refined_voxel_centers->height = 1;
 
-        if (i == 0)
+        // color and label points of the current cluster
+        LabelCloud::VectorType::iterator vc_it = refined_voxel_centers->points.begin ();
+        while (vc_it != refined_voxel_centers->points.end ())
         {
-          refined_voxel_pub_.publish (refined_voxel_centers);
-          refined_intersec_pub_.publish (refined_intersection);
+          vc_it->r = static_cast<uint8_t> (r * std::numeric_limits<uint8_t>::max ());
+          vc_it->g = static_cast<uint8_t> (g * std::numeric_limits<uint8_t>::max ());
+          vc_it->b = static_cast<uint8_t> (b * std::numeric_limits<uint8_t>::max ());
+          vc_it->label = static_cast<uint32_t> (i);
+          vc_it++;
         }
+
+        // all colored refined points of current cluster to all cluster cloud
+        all_refined_clusters->points.insert (all_refined_clusters->points.end (),
+            refined_voxel_centers->points.begin (), refined_voxel_centers->points.end ());
 
         // ====== refinement filter of the extracted clusters =====
 
-
-        // compute Convex hull for current cluster
+        // compute convex hull for current cluster refinement
         LabelCloudPtr convex_hull (new LabelCloud);
         std::vector<pcl::Vertices> polygons;
         pcl::ConvexHull<LabelPoint> c_hull;
-        c_hull.setInputCloud (refined_intersection);
+        c_hull.setInputCloud (refined_voxel_centers);
         c_hull.setDimension (3);
         c_hull.reconstruct (*convex_hull, polygons);
 
-        // create marker for convex hull
+        // create marker for the convex hull
         std::stringstream ss;
-        ss << "convex_hull_intersec_cluster" << std::setw (2) << std::setfill ('0') << i;
+        ss << "convex_hull_intersec_cluster" << std::setw (3) << std::setfill ('0') << i;
         visualization_msgs::Marker curr_hull_marker (hull_marker_);
         curr_hull_marker.id = i;
         curr_hull_marker.ns = ss.str ();
@@ -460,7 +350,9 @@ class ExTraReconstructedObject
         Eigen::Vector3f cog;
         shape_msgs::Mesh curr_mesh;
         tesselate3DConvexHull<LabelPoint> (convex_hull, polygons, curr_hull_marker, cog, curr_mesh);
-        pcl_conversions::fromPCL (cloud->header, curr_hull_marker.header);
+        curr_hull_marker.header = trans_obj_info.voxel_centers.header;
+        // TODO: time stamp of header should be updated, right?
+        curr_hull_marker.header.stamp = ros::Time::now ();
 
         // add current marker to marker array
         all_hulls.markers.push_back (curr_hull_marker);
@@ -485,7 +377,7 @@ class ExTraReconstructedObject
         o.pose.pose.pose.orientation.z = 0.0f;
         o.pose.pose.pose.orientation.w = 1.0f;
         sensor_msgs::PointCloud2 pc2;
-        pcl::toROSMsg (*leaf_center_cloud, pc2);
+        pcl::toROSMsg (*output[i], pc2);
         o.point_clouds.push_back (pc2);
         // add the mesh to recognized obj
         o.bounding_mesh = curr_mesh;
@@ -500,17 +392,25 @@ class ExTraReconstructedObject
 
       result_pub_.publish (transparent_recon_objs);
 
+      // publish visualization of the refined cluster centers
+      std_msgs::Header all_refined_header = trans_obj_info.voxel_centers.header;
+      all_refined_header.stamp = ros::Time::now ();
+      pcl_conversions::toPCL (all_refined_header, all_refined_clusters->header);
+      all_refined_clusters->width = all_refined_clusters->points.size ();
+      all_refined_clusters->height = 1;
+
+      // publish all clusters together in 1 point cloud, colored and labeled differently
+      refined_intersec_pub_.publish (all_refined_clusters);
+
       call_counter++;
 
-      ROS_INFO ("finished callback, published %lu clusters with a total of %lu points",
-          output.size (), total_points);
-
+      ROS_INFO ("finished ExTraction callback; published %lu transparent clusters", output.size ());
     };
 
   protected:
     ros::NodeHandle nhandle_;
     ros::NodeHandle param_handle_;
-    ros::Subscriber intersec_sub_;
+    ros::Subscriber voxelized_info_sub_;
 
     ros::Publisher voxel_cloud_pub_;
     ros::Publisher all_hulls_vis_pub_;
