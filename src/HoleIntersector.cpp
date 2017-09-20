@@ -846,7 +846,7 @@ class HoleIntersector
         boost::icl::interval_set<int> &acc_vp_intervals)
     {
       // check if number of points is sufficient
-      if (leaf_cloud.points.size () < (min_bin_marks_ / opening_angle_))
+      if (leaf_cloud.points.size () < (min_bin_marks_ / (opening_angle_ * 2.0 + 1)))
       {
         return false;
       }
